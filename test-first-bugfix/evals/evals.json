@@ -1,0 +1,23 @@
+{
+  "skill_name": "test-first-bugfix",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "there's a bug in the autocomplete — when I type a slash command like /gsd:plan and then backspace to delete the colon, the suggestions don't update. it keeps showing the gsd sub-commands instead of going back to the top-level list",
+      "expected_output": "Should write a failing test first in the autocomplete test file that reproduces the stale-suggestions-after-backspace behavior, then spawn subagents to fix it",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "just fix this — the activity log is crashing when the log file doesn't exist yet. getting ENOENT error on first run",
+      "expected_output": "Despite 'just fix this', should still write a reproduction test for the ENOENT case before attempting fixes. Should not skip the test step even though the user said 'just fix'",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "auth-storage.test.ts is passing but in production the API key getter returns undefined when the keychain is empty instead of throwing. can you look into it?",
+      "expected_output": "Should study existing auth-storage tests, write a new test case for the empty-keychain scenario that expects a throw, confirm it fails, then spawn fix subagents",
+      "files": []
+    }
+  ]
+}
