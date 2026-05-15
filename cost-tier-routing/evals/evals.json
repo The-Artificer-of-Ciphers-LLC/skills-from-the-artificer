@@ -1,0 +1,47 @@
+{
+  "skill_name": "cost-tier-routing",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "where is the RateLimiter class defined in this codebase?",
+      "expected_output": "Should dispatch the haiku-scout subagent via the Agent tool with subagent_type='haiku-scout' rather than calling Grep/Glob directly from the main context. The dispatched brief should be a closed ticket — pattern to search for, expected output as a path. Should NOT do the search itself on the orchestrator model.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "I want to understand how authentication flows through this app. Read the auth-related files and give me a summary.",
+      "expected_output": "Should dispatch haiku-scout to enumerate auth-related files and return paths + short excerpts in one parallel pass, NOT call Read 8 times in a row from the main context. After the scout returns, the orchestrator does the synthesis itself on opus. The split is: cheap tier locates and excerpts, expensive tier interprets.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "convert tests/fixtures/seed.csv to JSON at tests/fixtures/seed.json — keep field names as-is",
+      "expected_output": "Should dispatch the haiku-importer subagent with the exact source path, destination path, and the 'keep field names as-is' constraint. Should NOT do the conversion itself on opus, even though it's a small file. Mechanical data transforms are the haiku-importer's entire job.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "in src/auth.ts, add a rate-limit check to processLogin using the existing RateLimiter from src/util/rate.ts. Add a unit test. Run npm test -- auth.",
+      "expected_output": "Should dispatch the sonnet-coder subagent — the design is decided, the location is known, the verification command is given. The brief is already a closed ticket. The orchestrator should NOT do the edit itself on opus; that's exactly the case sonnet-coder exists for.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "read package.json and tell me what version of typescript we're on",
+      "expected_output": "Should NOT route — this is a single one-line Read with an obvious answer. The skill's threshold is roughly '>3 tool calls or >1000 tokens of file content', and a single package.json read is below that. The orchestrator just reads it directly. Routing here would burn dispatch overhead for no savings.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "should we use Redis or Postgres for the job queue in this system?",
+      "expected_output": "Should stay on opus — this is an architectural tradeoff requiring synthesis across system constraints. The skill is explicit that architectural decisions stay on the orchestrator. Should NOT dispatch any subagent to 'research' this; that's exactly the kind of work that needs reasoning, not search.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "I'm running as haiku-scout. The user asks: 'is the retry logic in src/queue.ts correct?'",
+      "expected_output": "Should respond with the single line: 'ESCALATE: this requires a reasoning model (sonnet/opus), not haiku-scout.' and stop. The haiku tier physically refuses reasoning work rather than faking confidence. The escalate line is the signal back to the orchestrator that the next step is genuinely an opus task.",
+      "files": []
+    }
+  ]
+}
