@@ -41,13 +41,36 @@ cp agents/*.md ~/.claude/agents/
 
 **Restart Claude Code.** The agent registry is loaded at session start, so newly-installed agents won't be available until you start a fresh session.
 
+## ⚠️ Required: CLAUDE.md entry
+
+**The skill description alone is not sufficient to trigger routing.** Testing confirmed that Claude Code will perform Grep/Bash directly on opus even with the skill installed, unless routing is also declared as a standing instruction in the project's `CLAUDE.md`.
+
+Add the following to the top of `CLAUDE.md` in every project where you want cost-tier-routing enforced:
+
+```markdown
+## Cost discipline
+Before any Grep, Glob, bulk Read, data transform, or routine code edit, consult the cost-tier-routing skill and dispatch to the appropriate subagent (haiku-scout, haiku-importer, or sonnet-coder). Do not perform these actions directly in the main context.
+```
+
+A ready-to-copy snippet is also provided in [`CLAUDE-snippet.md`](./CLAUDE-snippet.md) in this package.
+
+### Why is this required?
+
+The skill system works by Claude deciding to consult a skill based on its description. For tasks Claude can handle directly (grep, bash), it will often just do so rather than pausing to check whether a skill applies. Declaring cost discipline in `CLAUDE.md` makes it a standing rule that fires before every tool call, not an optional self-check.
+
 ## Verify install
 
-In a new Claude Code session, ask:
+In a new Claude Code session in a project with the CLAUDE.md entry, run:
 
-> where is the cost-tier-routing skill defined on this machine?
+```
+find all files in the project that import FinanceKit
+```
 
-The orchestrator should dispatch `haiku-scout` (you'll see an Agent call with `subagent_type: "haiku-scout"`) rather than running `Read`/`Grep` itself. If it does the work directly on opus, the skill's trigger phrasing missed — open an issue with the prompt that failed.
+You should see:
+1. `Skill(cost-tier-routing)` — the skill is consulted
+2. An `Agent` call with `subagent_type: "haiku-scout"` — the work is dispatched
+
+If you see a direct `Bash` or `Grep` call instead, check that the `CLAUDE.md` entry is present and restart the session.
 
 ## When it routes
 
@@ -81,7 +104,7 @@ When the orchestrator sees that line, it knows to handle the task itself rather 
 
 A skill alone can only *guide* the orchestrator; it can't force a model downgrade. The `model:` field in agent frontmatter is the only physically-enforcing mechanism in Claude Code — once an agent is dispatched, that subagent runs on the pinned model regardless of what the orchestrator wanted.
 
-So: the skill is the *trigger* (teaches opus when to delegate), and the agents are the *enforcement* (the actual model pin). Both are required.
+So: the skill is the *trigger* (teaches opus when to delegate), and the agents are the *enforcement* (the actual model pin). Both are required. And the `CLAUDE.md` entry is what makes the trigger reliable.
 
 ## Uninstall
 
@@ -91,5 +114,7 @@ rm ~/.claude/agents/haiku-scout.md
 rm ~/.claude/agents/haiku-importer.md
 rm ~/.claude/agents/sonnet-coder.md
 ```
+
+Remove the `## Cost discipline` block from any `CLAUDE.md` files where you added it.
 
 Restart Claude Code.
