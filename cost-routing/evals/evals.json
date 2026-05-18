@@ -1,0 +1,35 @@
+{
+  "skill_name": "cost-routing",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "where is the AuthMiddleware class defined in this codebase?",
+      "expected_output": "Should classify as scout tier and dispatch haiku-scout via the Agent tool. The dispatch brief must specify the symbol to search for and expect a file path back. Should NOT call Grep or Glob directly from the main context. The classifier's first-pass question — 'is this read-only lookup or search?' — should resolve to YES and route immediately to haiku.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "list all files that import from src/utils/logger.ts",
+      "expected_output": "Should classify as scout tier. Enumerating import sites is a mechanical multi-file search — exactly what haiku-scout exists for. Should dispatch a closed haiku-scout brief with the grep pattern and expected output shape (list of file paths). Should NOT fan out multiple Grep calls from the main context.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "add a unit test for the validateEmail function in src/validators.ts. The test file is tests/validators.test.ts. Run npm test -- validators when done.",
+      "expected_output": "Should classify as coder tier and dispatch sonnet-coder. The location is known (src/validators.ts, tests/validators.test.ts), the task is bounded (one new test), and the verification command is given. The orchestrator should NOT do the edit itself on opus. The dispatch brief must include: target files, what to add, and the verification command.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "refactor the three duplicated CSV parsers in src/parsers/invoices.ts, src/parsers/orders.ts, and src/parsers/returns.ts into a shared helper at src/parsers/csv-base.ts. Tests must still pass.",
+      "expected_output": "Should classify as coder tier and dispatch sonnet-coder with a precise change brief naming all four files and the refactor goal. The design decision (shared helper) is already made by the user, so this is bounded. Should NOT keep the work on opus. The verification step (run tests) should be included in the dispatch.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "should we use event sourcing or a CRUD append-log for the audit trail in this system?",
+      "expected_output": "Should classify as architect tier and stay on opus — this is an architectural tradeoff requiring synthesis across system constraints. The classifier's final question — 'does this require reasoning about ambiguous tradeoffs or system design?' — should resolve to YES. Should NOT dispatch any subagent; the work belongs on the orchestrator. Should NOT call any Read tool to 'gather context' before answering.",
+      "files": []
+    }
+  ]
+}

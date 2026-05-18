@@ -7,6 +7,7 @@ A collection of [Claude Code](https://docs.claude.com/en/docs/claude-code/overvi
 | Skill | What it does |
 |---|---|
 | [`cost-tier-routing/`](cost-tier-routing/) | Routes work to the cheapest model that can do it correctly — haiku for search/IO, sonnet for coding, opus for orchestration. Ships a skill **and** three model-pinned subagents. |
+| [`cost-routing/`](cost-routing/) | Top-level dispatcher that classifies requests into scout / coder / architect tiers and ships dispatch templates + a PreToolUse warning hook. Companion form to `cost-tier-routing`. |
 | [`laws-of-software-skills/`](laws-of-software-skills/) | A pack of 24 software-engineering laws (Conway, Hyrum, Postel, Wirth, Goodhart, Knuth's optimization principle, etc.) loaded as on-demand reference skills. |
 | [`rubber-duck/`](rubber-duck/) | Interactive rubber-duck debugging session. Forces you to reconstruct your mental model of the bug from scratch, which is where the bug usually surfaces. |
 | [`test-first-bugfix/`](test-first-bugfix/) | Test-driven bug fixing — reproduce the bug as a failing test before you touch the fix. Catches "fixes" that don't actually fix anything and prevents regressions. |
