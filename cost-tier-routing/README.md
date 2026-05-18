@@ -52,7 +52,7 @@ Add the following to the top of `CLAUDE.md` in every project where you want cost
 Before any Grep, Glob, bulk Read, data transform, or routine code edit, consult the cost-tier-routing skill and dispatch to the appropriate subagent (haiku-scout, haiku-importer, or sonnet-coder). Do not perform these actions directly in the main context.
 ```
 
-A ready-to-copy snippet is also provided in [`CLAUDE-snippet.md`](./CLAUDE-snippet.md) in this package.
+The block above is the minimal version. A more comprehensive, proven snippet — with self-check questions, concrete violation examples, and a companion agent-tier-discipline rule — is in [`CLAUDE-snippet.md`](./CLAUDE-snippet.md). Use the comprehensive version unless you have a specific reason to trim.
 
 ### Why is this required?
 
