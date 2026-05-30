@@ -11,6 +11,7 @@ A collection of [Claude Code](https://docs.claude.com/en/docs/claude-code/overvi
 | [`laws-of-software-skills/`](laws-of-software-skills/) | A pack of 24 software-engineering laws (Conway, Hyrum, Postel, Wirth, Goodhart, Knuth's optimization principle, etc.) loaded as on-demand reference skills. |
 | [`rubber-duck/`](rubber-duck/) | Interactive rubber-duck debugging session. Forces you to reconstruct your mental model of the bug from scratch, which is where the bug usually surfaces. |
 | [`test-first-bugfix/`](test-first-bugfix/) | Test-driven bug fixing — reproduce the bug as a failing test before you touch the fix. Catches "fixes" that don't actually fix anything and prevents regressions. |
+| [`trust-but-verify/`](trust-but-verify/) | Re-validates every claim a subagent hands back against a primary source — the code, docs/ADRs, the memory dir, context7, or a language spec — before you act on it. Treats a report as a lead, not a fact: nothing is verified until a source was opened and quoted. |
 
 ## Install (default)
 

@@ -1,0 +1,23 @@
+{
+  "skill_name": "trust-but-verify",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "I had a scout subagent inventory our dependencies in this repo. I'm about to write a dependency-migration guide based on its report, so the details need to be exactly right. Here's what it reported: (1) The project has exactly two runtime dependencies: @anthropic-ai/claude-agent-sdk and ws. (2) ws is pinned with a caret range, ^8.20.1. (3) typescript is at ^6.0.3 in devDependencies. (4) js-yaml is a runtime dependency. Before I act on this, tell me which of these I can trust.",
+      "expected_output": "Opens package.json (the primary source) rather than trusting the report, and returns a per-claim verdict table with VERIFIED/CONTRADICTED/UNVERIFIED. Catches the two planted errors against the source: ws is an exact pin (no caret) and js-yaml is a devDependency not a runtime dependency. Confirms the true claims with a cited source location (ideally file:line). Does not pass the report through unchecked.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "A research subagent summarized our architecture decision records for me. I want to cite these in a design doc, so I need them confirmed against the actual docs/adr/ directory. It reported: (1) ADR 0003 covers the model-catalog module. (2) ADR 0007 is about the SDK package seam. (3) ADR 0015 establishes our caching-layer decision. (4) We decided in an ADR to standardize on pnpm instead of npm. Which of these are actually backed by a decision record?",
+      "expected_output": "Reads the actual ADR files (not just filenames). Confirms the two real ADRs, and catches that the '0015' caching claim is misattributed (the matching file is about something else, not caching) — a CONTRADICTED. Marks the pnpm-over-npm claim UNVERIFIED rather than accepting it, and runs a targeted re-dispatch (grep for pnpm/caching) before concluding the negative. Distinguishes UNVERIFIED (no source found) from CONTRADICTED (source disagrees) instead of collapsing both into a vague 'not backed'.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "A subagent investigating our test setup reported the following. I'm about to refactor a batch of property-based tests based on it: (1) fast-check's fc.assert runs 100 generated cases by default for each property. (2) fast-check is in our devDependencies at ^4.8.0. (3) vitest is our test runner and is listed in devDependencies. Confirm these before I start changing tests.",
+      "expected_output": "Sources the fast-check default from an authoritative library source (context7 or node_modules) rather than memory, AND checks whether the repo overrides that default in its own test config/setup rather than stopping at the upstream default. Confirms the fast-check version against package.json. Catches that vitest is not actually a declared dependency or the real test runner. Produces explicit per-claim verdicts with cited sources.",
+      "files": []
+    }
+  ]
+}
