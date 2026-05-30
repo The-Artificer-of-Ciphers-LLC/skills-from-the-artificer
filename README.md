@@ -1,6 +1,6 @@
 # skills-from-the-artificer
 
-A collection of [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) skills, distributed as drop-in directories. Each top-level folder is a self-contained skill — copy it into `~/.claude/skills/` and restart Claude Code.
+A collection of [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) skills, distributed as drop-in directories. Each top-level folder is a self-contained skill — install it with the `skills` CLI, or copy it into `~/.claude/skills/` and restart Claude Code.
 
 ## Skills
 
@@ -8,20 +8,66 @@ A collection of [Claude Code](https://docs.claude.com/en/docs/claude-code/overvi
 |---|---|
 | [`cost-tier-routing/`](cost-tier-routing/) | Routes work to the cheapest model that can do it correctly — haiku for search/IO, sonnet for coding, opus for orchestration. Ships a skill **and** three model-pinned subagents. |
 | [`cost-routing/`](cost-routing/) | Top-level dispatcher that classifies requests into scout / coder / architect tiers and ships dispatch templates + a PreToolUse warning hook. Companion form to `cost-tier-routing`. |
-| [`laws-of-software-skills/`](laws-of-software-skills/) | A pack of 24 software-engineering laws (Conway, Hyrum, Postel, Wirth, Goodhart, Knuth's optimization principle, etc.) loaded as on-demand reference skills. |
 | [`rubber-duck/`](rubber-duck/) | Interactive rubber-duck debugging session. Forces you to reconstruct your mental model of the bug from scratch, which is where the bug usually surfaces. |
 | [`test-first-bugfix/`](test-first-bugfix/) | Test-driven bug fixing — reproduce the bug as a failing test before you touch the fix. Catches "fixes" that don't actually fix anything and prevents regressions. |
 | [`trust-but-verify/`](trust-but-verify/) | Re-validates every claim a subagent hands back against a primary source — the code, docs/ADRs, the memory dir, context7, or a language spec — before you act on it. Treats a report as a lead, not a fact: nothing is verified until a source was opened and quoted. |
 
-## Install (default)
+### Laws of software (24 reference skills)
 
-Each skill is a `cp -r` away:
+A pack of software-engineering laws, each loaded as an on-demand reference skill. Every law is its own top-level directory:
+
+[`choose-boring-technology/`](choose-boring-technology/) ·
+[`conways-law/`](conways-law/) ·
+[`cunninghams-law/`](cunninghams-law/) ·
+[`doerrs-law/`](doerrs-law/) ·
+[`fitts-law/`](fitts-law/) ·
+[`galls-law/`](galls-law/) ·
+[`goodharts-law/`](goodharts-law/) ·
+[`greenspuns-tenth-rule/`](greenspuns-tenth-rule/) ·
+[`hofstadters-law/`](hofstadters-law/) ·
+[`hyrums-law/`](hyrums-law/) ·
+[`kerckhoffs-principle/`](kerckhoffs-principle/) ·
+[`kernighans-law/`](kernighans-law/) ·
+[`knuths-optimization-principle/`](knuths-optimization-principle/) ·
+[`lady-lovelaces-objection/`](lady-lovelaces-objection/) ·
+[`leaky-abstractions/`](leaky-abstractions/) ·
+[`linuss-law/`](linuss-law/) ·
+[`moores-law/`](moores-law/) ·
+[`norvigs-law/`](norvigs-law/) ·
+[`parkinsons-law/`](parkinsons-law/) ·
+[`peter-principle/`](peter-principle/) ·
+[`postels-law/`](postels-law/) ·
+[`shirky-principle/`](shirky-principle/) ·
+[`wirths-law/`](wirths-law/) ·
+[`zawinskis-law/`](zawinskis-law/)
+
+## Install (recommended: the `skills` CLI)
+
+The [`skills`](https://skills.sh/) CLI discovers each top-level skill and installs it for you. Add `-g` to install globally (user-level, into `~/.claude/skills/`) instead of into the current project.
 
 ```bash
-# pick one
+# install everything
+npx skills add The-Artificer-of-Ciphers-LLC/skills-from-the-artificer --all -g
+
+# or choose interactively
+npx skills add The-Artificer-of-Ciphers-LLC/skills-from-the-artificer -g
+
+# or install specific skills
+npx skills add The-Artificer-of-Ciphers-LLC/skills-from-the-artificer -g --skill conways-law,rubber-duck
+```
+
+## Install (manual)
+
+Each skill is also a `cp -r` away:
+
+```bash
+# pick the ones you want
 cp -r rubber-duck ~/.claude/skills/
 cp -r test-first-bugfix ~/.claude/skills/
-cp -r laws-of-software-skills ~/.claude/skills/
+cp -r conways-law ~/.claude/skills/
+
+# or grab every law at once
+cp -r *-law *-principle *-rule *-objection *-technology *-abstractions ~/.claude/skills/
 ```
 
 Restart Claude Code. The skill discovery scan runs at session start.
