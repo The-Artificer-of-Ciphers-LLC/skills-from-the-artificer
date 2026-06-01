@@ -6,6 +6,7 @@ A collection of [Claude Code](https://docs.claude.com/en/docs/claude-code/overvi
 
 | Skill | What it does |
 |---|---|
+| [`skills-from-the-artificer/`](skills-from-the-artificer/) | **Meta dispatcher.** Given a change, fix, diff, design, or decision, classifies it and points you at the relevant law/principle skill(s) from the 24-law collection below. The entry point for "which laws apply here?" and the Bug Remediation Step 2 cross-reference. |
 | [`cost-tier-routing/`](cost-tier-routing/) | Routes work to the cheapest model that can do it correctly — haiku for search/IO, sonnet for coding, opus for orchestration. Ships a skill **and** three model-pinned subagents. |
 | [`cost-routing/`](cost-routing/) | Top-level dispatcher that classifies requests into scout / coder / architect tiers and ships dispatch templates + a PreToolUse warning hook. Companion form to `cost-tier-routing`. |
 | [`rubber-duck/`](rubber-duck/) | Interactive rubber-duck debugging session. Forces you to reconstruct your mental model of the bug from scratch, which is where the bug usually surfaces. |
