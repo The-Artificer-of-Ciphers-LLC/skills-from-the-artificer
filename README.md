@@ -11,6 +11,7 @@ A collection of [Claude Code](https://docs.claude.com/en/docs/claude-code/overvi
 | [`rubber-duck/`](rubber-duck/) | Interactive rubber-duck debugging session. Forces you to reconstruct your mental model of the bug from scratch, which is where the bug usually surfaces. |
 | [`test-first-bugfix/`](test-first-bugfix/) | Test-driven bug fixing — reproduce the bug as a failing test before you touch the fix. Catches "fixes" that don't actually fix anything and prevents regressions. |
 | [`trust-but-verify/`](trust-but-verify/) | Re-validates every claim a subagent hands back against a primary source — the code, docs/ADRs, the memory dir, context7, or a language spec — before you act on it. Treats a report as a lead, not a fact: nothing is verified until a source was opened and quoted. |
+| [`ci-preflight/`](ci-preflight/) | Pre-push checklist that prevents CI whiplash — multiple red pushes that could have been caught locally. Guards against three anti-patterns: missing registration surfaces when adding new shipped files, skipping `npm test` before pushing, and guessing at cross-platform fixes instead of diagnosing the root cause. |
 
 ### Laws of software (24 reference skills)
 
