@@ -53,6 +53,12 @@ npm run lint       # catch lint errors before they hit CI
 
 If the full suite is too slow for every push, run `npm test:affected` (or the repo's equivalent) — but know what it misses.
 
+**⚠️ `npm test` does not always mirror CI's unit scope.** In gsd-core specifically, the default `npm test` (`node scripts/run-tests.cjs`) selects a different set than CI's unit job — observed in practice reporting `fail 0` locally while CI's unit job failed on `inventory-counts`. Mirror the CI unit job directly before pushing:
+
+```bash
+npm run test:unit          # mirrors CI's "test (ubuntu, NN)" / "full test" unit scope; catches drift-guard tests npm test can skip
+```
+
 **Specific CI gates to run locally before pushing:**
 ```bash
 npm run lint:changeset     # catches missing/malformed changeset
@@ -97,7 +103,7 @@ node --test tests/inventory-counts.test.cjs tests/inventory-manifest-sync.test.c
 Run through this before every `git push` on a branch that changes shipped files:
 
 ```
-[ ] npm test (or npm test:affected for large repos)
+[ ] npm run test:unit (mirrors CI's unit job — npm test alone can under-cover it; see Anti-pattern 2)
 [ ] npm run lint
 [ ] If adding a new shipped file:
     [ ] Grepped for an existing sibling to find all registration surfaces
