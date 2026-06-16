@@ -6,7 +6,7 @@
 1. Read the repository guidelines (`CONTRIBUTING.md`, `CONTEXT.md`) and search for any related open issues. You must follow these guidelines strictly and address any overlapping issues found while fulfilling this request.
 2. Run the `/diagnose` skill on the reported error logs, stack traces, or broken behavior descriptions.
 3. Execute the `/root-cause-analysis` skill to trace the bug to its exact origin in the source code.
-4. If the bug relates to an external software integration, use web search tools (`context7` or similar) to verify recent API deprecations, schema changes, or breaking updates.
+4. **EXTERNAL DEPENDENCY VERIFICATION:** If the bug involves external software, libraries, or APIs, **do not blindly accept the reporter's statement or assumptions as fact.** You must actively research the official documentation, API references, and changelogs using `context7` and other web search tools to independently verify intended behaviors, recent deprecations, or schema changes.
 
 ## Step 2: Rubber-Duck Debugging & Architectural Impact
 1. Run the local `rubber-duck` skill to talk through the proposed fix and ensure it does not introduce side effects elsewhere.
