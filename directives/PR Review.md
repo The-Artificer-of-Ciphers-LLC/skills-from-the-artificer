@@ -80,7 +80,9 @@ Check against CONTRIBUTING.md; violations are findings:
 
 ## 6. Compose and post the GitHub review
 
-Structure: **Summary** → **Classification & gate compliance** → **Functional checklist** (feature track) / **Root-cause & paper-over verdict** (bug track) → **Findings by severity** (blocker / major / minor / nit) → **Verdict**.
+> **🛑 ZERO-TOLERANCE APPROVAL POLICY:** Minor issues are NOT approvable. Every single issue found, regardless of severity (even a 'nit'), MUST be fully resolved before approval is granted. Complex systems require clean code top to bottom. Do not grant approval if any feedback remains unaddressed.
+
+Structure: **Summary** → **Classification & gate compliance** → **Functional checklist** (feature track) / **Root-cause & paper-over verdict** (bug track) → **Findings by severity** (Blocker / Major / Minor / Nit — *Note: ALL classifications act as hard blockers for approval*) → **Verdict**.
 
 ## 7. Competing PRs for the same issue
 
