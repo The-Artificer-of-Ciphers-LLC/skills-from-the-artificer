@@ -30,4 +30,5 @@
 3. Checkout your hotfix branch that was assigned in the issue and rebase it directly onto the latest upstream tracking branch for `next` (`git rebase origin/next`).
 4. Resolve any immediate merge conflicts locally, validating your fixes against the test suite afterward.
 5. Run the repository's local CI test, linting, and formatting commands on this freshly updated branch state.
-6. Once all checks return a green status, push the branch and open the Pull Request targets directly against the `next` branch.
+6. **If any changes occurred during this process, update the relevant documentation using the `/writing-documentation-with-ditaxis` skill.**
+7. Once all checks return a green status, push the branch and open the Pull Request targets directly against the `next` branch.

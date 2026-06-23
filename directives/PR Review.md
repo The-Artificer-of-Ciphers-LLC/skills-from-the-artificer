@@ -9,9 +9,11 @@ Paste this directive with a PR number/URL (`$PR`). Review only — never push co
 1. Read CONTEXT.md in full at the start of the review — it is the canonical machine-greppable source of truth; every standard cited below lives there. Then read CONTRIBUTING.md sections "Pull Request Guidelines" + "CHANGELOG Entries" fresh (per `META.RULE.read-contributing-first`). Precedence: `META.RULE.canonical-source-precedence=CONTRIBUTING.md > docs/adr/* > CONTEXT.md > agent memory`.
 2. Review any related open issues to ensure this PR aligns with ongoing work and does not violate repo standards. Address any relevant overlaps immediately in the review.
 3. `gh pr view $PR --json author,title,body,labels,headRefName,baseRefName` — confirm the author is NOT me (trekkie / Tom Boucher). If it is mine, stop.
-4. Extract the linked issue from the PR body. Per `CI.GATE.issue-link-required=hard-fail if PR body lacks closes/fixes/resolves #<issue>` — if missing, post a request-changes review citing that gate and stop.
-5. `gh issue view <N> --json labels,title,body` for classification and the functional contract.
-6. `gh pr checkout $PR` locally (read-only).
+4. **Check activity state:** If I was the last entity to post a review or comment, and there have been no subsequent updates (no new commits, no new comments) from the contributor, **skip this PR**.
+5. **Check staleness threshold:** If the PR has been awaiting author action for more than 5 days, mark it as stale. **Close the PR** and post a comment stating: *"Closing this PR as stale due to inactivity. We expect PRs to be followed up on within 5 days. Please feel free to reopen or submit a new PR when you have the bandwidth to continue this contribution."* Then stop.
+6. Extract the linked issue from the PR body. Per `CI.GATE.issue-link-required=hard-fail if PR body lacks closes/fixes/resolves #<issue>` — if missing, post a request-changes review citing that gate and stop.
+7. `gh issue view <N> --json labels,title,body` for classification and the functional contract.
+8. `gh pr checkout $PR` locally (read-only).
 
 ## 1. Classify via linked-issue labels
 
