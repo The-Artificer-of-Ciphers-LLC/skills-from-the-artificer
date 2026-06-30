@@ -16,14 +16,15 @@ Paste this directive with a PR number/URL (`$PR`). Review only — never push co
 
 ## 1. Preconditions
 **[BLOCKING]** *Log completion with `continuous-memory` when done.*
-1. Read CONTEXT.md in full at the start of the review — it is the canonical machine-greppable source of truth; every standard cited below lives there. Then read CONTRIBUTING.md sections "Pull Request Guidelines" + "CHANGELOG Entries" fresh (per `META.RULE.read-contributing-first`). Precedence: `META.RULE.canonical-source-precedence=CONTRIBUTING.md > docs/adr/* > CONTEXT.md > agent memory`.
-2. Review any related open issues to ensure this PR aligns with ongoing work and does not violate repo standards. Address any relevant overlaps immediately in the review.
-3. `gh pr view $PR --json author,title,body,labels,headRefName,baseRefName` — confirm the author is NOT me (trekkie / Tom Boucher). If it is mine, stop.
-4. **Check activity state:** If I was the last entity to post a review or comment, and there have been no subsequent updates (no new commits, no new comments) from the contributor, **skip this PR**.
-5. **Check staleness threshold:** If the PR has been awaiting author action for more than 5 days, mark it as stale. **Close the PR** and post a comment stating: *"Closing this PR as stale due to inactivity. We expect PRs to be followed up on within 5 days. Please feel free to reopen or submit a new PR when you have the bandwidth to continue this contribution."* Then stop.
-6. Extract the linked issue from the PR body. Per `CI.GATE.issue-link-required=hard-fail if PR body lacks closes/fixes/resolves #<issue>` — if missing, post a request-changes review citing that gate and stop.
-7. `gh issue view <N> --json labels,title,body` for classification and the functional contract.
-8. `gh pr checkout $PR` locally (read-only). Use `get_symbol_context` from Memtrace to read all relevant internal source code files touched by the PR comprehensively.
+1. **Initialize Branch State:** Immediately fetch the absolute latest changes for the `next` branch (`git fetch origin next`). You MUST base your evaluation on the latest `origin/next` branch, not whatever local branch you happen to currently be in.
+2. Read CONTEXT.md in full at the start of the review — it is the canonical machine-greppable source of truth; every standard cited below lives there. Then read CONTRIBUTING.md sections "Pull Request Guidelines" + "CHANGELOG Entries" fresh (per `META.RULE.read-contributing-first`). Precedence: `META.RULE.canonical-source-precedence=CONTRIBUTING.md > docs/adr/* > CONTEXT.md > agent memory`.
+3. Review any related open issues to ensure this PR aligns with ongoing work and does not violate repo standards. Address any relevant overlaps immediately in the review.
+4. `gh pr view $PR --json author,title,body,labels,headRefName,baseRefName` — confirm the author is NOT me (trekkie / Tom Boucher). If it is mine, stop.
+5. **Check activity state:** If I was the last entity to post a review or comment, and there have been no subsequent updates (no new commits, no new comments) from the contributor, **skip this PR**.
+6. **Check staleness threshold:** If the PR has been awaiting author action for more than 5 days, mark it as stale. **Close the PR** and post a comment stating: *"Closing this PR as stale due to inactivity. We expect PRs to be followed up on within 5 days. Please feel free to reopen or submit a new PR when you have the bandwidth to continue this contribution."* Then stop.
+7. Extract the linked issue from the PR body. Per `CI.GATE.issue-link-required=hard-fail if PR body lacks closes/fixes/resolves #<issue>` — if missing, post a request-changes review citing that gate and stop.
+8. `gh issue view <N> --json labels,title,body` for classification and the functional contract.
+9. Checkout the latest `next` branch, then `gh pr checkout $PR` locally (read-only). Use `get_symbol_context` from Memtrace to read all relevant internal source code files touched by the PR comprehensively.
 
 ## 2. Classify via linked-issue labels
 **[BLOCKING]** *Log completion with `continuous-memory` when done.*
@@ -99,4 +100,8 @@ Before reviewing, check for rivals: `gh pr list --search "<issue-number> in:body
 > **🛑 ZERO-TOLERANCE APPROVAL POLICY:** Minor issues are NOT approvable. Every single issue found, regardless of severity (even a 'nit'), MUST be fully resolved before approval is granted. Complex systems require clean code top to bottom. Do not grant approval if any feedback remains unaddressed.
 
 Structure: **Summary** → **Classification & gate compliance** → **Functional checklist** (feature track) / **Root-cause & paper-over verdict** (bug track) → **Findings by severity** (Blocker / Major / Minor / Nit — *Note: ALL classifications act as hard blockers for approval*) → **Verdict**.
-Apply Github Labels to reflect status, clear any that do not. Label appropriate area.
+
+**Post-Review Status Updates:** 
+1. Apply the appropriate GitHub labels to reflect the final review status (e.g., `changes-requested` or `approved`).
+2. Explicitly clear any outdated review status labels. 
+3. Ensure the PR is labeled with the appropriate domain area.
