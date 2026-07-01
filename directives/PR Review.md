@@ -19,12 +19,13 @@ Paste this directive with a PR number/URL (`$PR`). Review only — never push co
 1. **Initialize Branch State:** Immediately fetch the absolute latest changes for the `next` branch (`git fetch origin next`). You MUST base your evaluation on the latest `origin/next` branch, not whatever local branch you happen to currently be in.
 2. Read CONTEXT.md in full at the start of the review — it is the canonical machine-greppable source of truth; every standard cited below lives there. Then read CONTRIBUTING.md sections "Pull Request Guidelines" + "CHANGELOG Entries" fresh (per `META.RULE.read-contributing-first`). Precedence: `META.RULE.canonical-source-precedence=CONTRIBUTING.md > docs/adr/* > CONTEXT.md > agent memory`.
 3. Review any related open issues to ensure this PR aligns with ongoing work and does not violate repo standards. Address any relevant overlaps immediately in the review.
-4. `gh pr view $PR --json author,title,body,labels,headRefName,baseRefName` — confirm the author is NOT me (trekkie / Tom Boucher). If it is mine, stop.
-5. **Check activity state:** If I was the last entity to post a review or comment, and there have been no subsequent updates (no new commits, no new comments) from the contributor, **skip this PR**.
-6. **Check staleness threshold:** If the PR has been awaiting author action for more than 5 days, mark it as stale. **Close the PR** and post a comment stating: *"Closing this PR as stale due to inactivity. We expect PRs to be followed up on within 5 days. Please feel free to reopen or submit a new PR when you have the bandwidth to continue this contribution."* Then stop.
-7. Extract the linked issue from the PR body. Per `CI.GATE.issue-link-required=hard-fail if PR body lacks closes/fixes/resolves #<issue>` — if missing, post a request-changes review citing that gate and stop.
-8. `gh issue view <N> --json labels,title,body` for classification and the functional contract.
-9. Checkout the latest `next` branch, then `gh pr checkout $PR` locally (read-only). Use `get_symbol_context` from Memtrace to read all relevant internal source code files touched by the PR comprehensively.
+4. `gh pr view $PR --json author,title,body,labels,headRefName,baseRefName,mergeable` — confirm the author is NOT me (trekkie / Tom Boucher). If it is mine, stop.
+5. **Merge Conflict Gate:** If the PR has merge conflicts with the base branch (`mergeable` state is `CONFLICTING`), immediately post a request-changes review requiring the author to resolve the conflicts, and **STOP** the review process. 
+6. **Check activity state:** If I was the last entity to post a review or comment, and there have been no subsequent updates (no new commits, no new comments) from the contributor, **skip this PR**.
+7. **Check staleness threshold:** If the PR has been awaiting author action for more than 5 days, mark it as stale. **Close the PR** and post a comment stating: *"Closing this PR as stale due to inactivity. We expect PRs to be followed up on within 5 days. Please feel free to reopen or submit a new PR when you have the bandwidth to continue this contribution."* Then stop.
+8. Extract the linked issue from the PR body. Per `CI.GATE.issue-link-required=hard-fail if PR body lacks closes/fixes/resolves #<issue>` — if missing, post a request-changes review citing that gate and stop.
+9. `gh issue view <N> --json labels,title,body` for classification and the functional contract.
+10. Checkout the latest `next` branch, then `gh pr checkout $PR` locally (read-only). Use `get_symbol_context` from Memtrace to read all relevant internal source code files touched by the PR comprehensively.
 
 ## 2. Classify via linked-issue labels
 **[BLOCKING]** *Log completion with `continuous-memory` when done.*
@@ -97,7 +98,7 @@ Before reviewing, check for rivals: `gh pr list --search "<issue-number> in:body
 
 ## 8. Compose and post the GitHub review
 **[FINAL STEP]** *Execute only after previous sections are completely resolved and sequentially logged.*
-> **🛑 ZERO-TOLERANCE APPROVAL POLICY:** Minor issues are NOT approvable. Every single issue found, regardless of severity (even a 'nit'), MUST be fully resolved before approval is granted. Complex systems require clean code top to bottom. Do not grant approval if any feedback remains unaddressed.
+> **🛑 ZERO-TOLERANCE APPROVAL POLICY:** Minor issues are NOT approvable. Every single issue found, regardless of severity (even a 'nit'), MUST be fully resolved before approval is granted. **Any existing merge conflicts immediately stop and block any approval.** Complex systems require clean code top to bottom. Do not grant approval if any feedback remains unaddressed.
 
 Structure: **Summary** → **Classification & gate compliance** → **Functional checklist** (feature track) / **Root-cause & paper-over verdict** (bug track) → **Findings by severity** (Blocker / Major / Minor / Nit — *Note: ALL classifications act as hard blockers for approval*) → **Verdict**.
 
