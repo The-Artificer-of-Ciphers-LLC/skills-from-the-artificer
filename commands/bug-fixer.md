@@ -402,10 +402,28 @@ Then set this issue's `queue.json` state to `in_progress`.
 5. **Mutation gate.** Stryker enforces an **80% killed/total threshold — surviving mutants block
    merges.** A surviving mutant means a test asserts presence rather than behavior; strengthen the
    assertion, don't raise the threshold. *(Runs in CI, not locally — design assertions to survive it.)*
-6. **Fix every defect you surface, inline.** A defect found while working — **anywhere in the
-   tree** — is fixed in this change. "Pre-existing" / "not my code" / "unrelated" / "environmental"
-   are **not** grounds to defer, and this **overrides one-concern-per-PR**. No `spawn_task`, no
-   `gh issue create`, no annotate-and-move-on.
+6. **Every defect you surface gets one of exactly two outcomes. There is no third.**
+
+   | Outcome | When | How |
+   |---|---|---|
+   | **Fixed inline** (default) | Anything you can fold into this change | Fix it. **Overrides one-concern-per-PR.** |
+   | **Filed as an issue** | A **separate, pre-existing, systemic** problem where folding it in would bury the actual fix in an unreviewable diff | `GSD_ISSUE_TRIAGE_OK=1 gh issue create …` **before the merge**, then link the number |
+
+   ⛔ **The third path is forbidden: describing the finding in the PR body, a commit message, or a
+   code comment, and then merging.** That is a **silent defer**, not a disclosure. The PR body is
+   not a tracker — once the PR merges it is archive, nobody queries it, and the finding is gone.
+   Phrases like *"called out for a maintainer decision"*, *"genuinely out of scope"*, or **"happy to
+   open a follow-up issue on request"** are the exact shape of this failure: the analysis was
+   correct, the work was real, and it evaporated at merge.
+
+   **"Too big to fold in" is a reason to FILE, never a reason to merely mention.** If the finding is
+   large enough to justify its own PR, it is large enough to justify its own issue — that is the
+   same judgment, and the issue is the cheaper half. `GSD_ISSUE_TRIAGE_OK=1` is legitimate here
+   precisely because this is a **separate pre-existing problem**, not the bug you were fixing; it is
+   never a way to launder a defect you introduced or touched.
+
+   No `spawn_task`, ever. No annotate-and-move-on. **A finding you cannot fix and will not file is a
+   finding you must fix.**
 7. **Test hygiene.** Delete and replace pass-always, vacuous-truth, source-grep, elapsed-time, or
    real-race tests you encounter in this PR. A stale-test correction gets its own `test:` or `fix:`
    commit.
@@ -564,9 +582,23 @@ Then set this issue's `queue.json` state to `in_progress`.
      "checks": { "green": true, "failing": [] },
      "mergeable": "MERGEABLE",
      "verdict_sha": "<40-hex sha gsd-test passed on>",
-     "merge": { "method": "squash", "admin": false, "admin_reason": null }
+     "merge": { "method": "squash", "admin": false, "admin_reason": null },
+     "findings_not_fixed": [
+       { "summary": "17 of 19 model=-dispatching workflows carry no omit-on-inherit guidance",
+         "why_not_inline": "touches 17 shipped files + 19 golden fixtures + every size baseline; would bury the two dangling references under an unreviewable diff",
+         "issue": 2731 }
+     ]
    }
    ```
+
+   **`findings_not_fixed` is where the third path dies.** Every entry needs a real `issue` number.
+   `"issue": null`, `"issue": "follow-up"`, or a prose promise **denies the merge** — because a
+   finding that exists only as a sentence is a finding that will not survive it. An empty array is
+   the normal case and is fine; the array exists so that "I found something I could not fix" has
+   exactly one representable form, and that form is a tracked issue.
+
+   *Order matters: file the issue, put its number here, then merge.* Merging first and filing
+   "after" is the failure this gate exists to prevent — there is no after.
 
    The gate enforces `CLAUDE.md` → Merge Constraints directly:
    - **`checks.green` must be `true` and `failing` empty.** A red check DENIES the merge, and
@@ -619,8 +651,13 @@ Report **once, at the end**, rendered from `.gsd/bug/queue.json`:
 - **No waving off warnings.** Any warning or error surfaced during a run is yours to diagnose,
   root-cause, and fix before the PR. "Pre-existing" / "unrelated" / "environmental" are not answers
   — **prove it, never assert it.**
-- **Never defer a defect.** Found while fixing ⇒ fixed in this change. Overrides
-  one-concern-per-PR. No `spawn_task`, no `gh issue create` for your own finds.
+- **Never defer a defect — and "mentioning it" is deferring.** Every finding ends as **fixed
+  inline** (default; overrides one-concern-per-PR) or **filed as a tracked issue** (only for a
+  separate, pre-existing, systemic problem that would bury the fix in an unreviewable diff — filed
+  **before** the merge, with its number in `findings_not_fixed`). Writing it into the PR body, a
+  commit message, or a code comment and then merging is a **silent defer**: the PR body is archive,
+  not a tracker. "Happy to open a follow-up issue on request" is not a disposition. Never
+  `spawn_task`.
 - **Acceptance criteria are must-haves.** An unmet criterion parks the issue rather than shipping.
 - **Two orthogonal reviews, ≥1 isolated, zero tolerance.** Findings at any severity block. Never
   self-approve a change reviewed only by its own author-context. `/codex` is **not used in this

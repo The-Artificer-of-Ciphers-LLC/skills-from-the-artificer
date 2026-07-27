@@ -138,11 +138,21 @@ gate's job is to make skipping *visible and deliberate* rather than free and sil
 { "when": "--admin", "path": "merge.admin_reason",
   "equals": "missing-secondary-reviewer",            "else": "..." }
 { "path": "issues[issue={arm.issue}].state", "in": ["merged","parked"], "else": "..." }
+{ "path": "findings_not_fixed",
+  "every": { "path": "issue", "integer": true, "min": 1 },  "else": "..." }
 ```
 
-Predicates: `equals`, `notEquals`, `in`, `notIn`, `empty`, `nonEmpty`, `exists`. Paths are dotted
-with an array-find form `list[key=value]`. Interpolation sources: `{slug}`, `{branch}`, any
-`capture`, and `{arm.<field>}` read from the family's arm file.
+Predicates: `equals`, `notEquals`, `in`, `notIn`, `empty`, `nonEmpty`, `exists`, `integer`, `min`,
+and `every` (recurses one assertion over each element of an array). Paths are dotted with an
+array-find form `list[key=value]`. Interpolation sources: `{slug}`, `{branch}`, any `capture`, and
+`{arm.<field>}` read from the family's arm file.
+
+`every` exists for a specific failure worth naming. An agent that finds a real problem it cannot fix
+will, if you let it, **describe it in the PR body and merge** — the analysis is genuine, the scope
+argument is often correct, and the information is destroyed anyway, because a merged PR body is
+archive that nobody queries. Giving "I found something I could not fix" exactly one representable
+form — a list entry carrying a tracked issue number — closes the gap, because *"too big to fold in"
+is a reason to file, never a reason to merely mention.*
 
 This is how a policy that was prose — *"admin-merge may bypass a missing reviewer, never a red CI
 or a conflict"* — becomes something the tool enforces rather than something the agent remembers.

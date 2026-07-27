@@ -239,6 +239,23 @@ function assertFails(a, doc, vars) {
   if (a.nonEmpty === true && (Array.isArray(got) ? got.length === 0 : (got === undefined || got === null || got === '')))
     return `${a.path} is ${show()}, expected non-empty`;
   if (a.exists === true && got === undefined) return `${a.path} is not present`;
+  if (a.integer === true && !Number.isInteger(got)) return `${a.path} is ${show()}, expected an integer`;
+  if ('min' in a && !(typeof got === 'number' && got >= a.min)) return `${a.path} is ${show()}, expected >= ${a.min}`;
+  // `every` recurses one assertion over each element of an array. This is what lets
+  // a contract say "each unfixed finding must carry a real issue number" — the
+  // shape that stops a finding from surviving only as prose.
+  if (a.every) {
+    // Absent is vacuously satisfied: "no unfixed findings" is the normal case, and a
+    // gate that denied every artifact omitting the field would be unusable within a
+    // day. A field that IS present but is not an array is still an error. Compose
+    // with `exists: true` when the field is genuinely mandatory.
+    if (got === undefined || got === null) return null;
+    if (!Array.isArray(got)) return `${a.path} is ${show()}, expected an array`;
+    for (let i = 0; i < got.length; i += 1) {
+      const sub = assertFails(a.every, got[i], vars);
+      if (sub) return `${a.path}[${i}].${sub}`;
+    }
+  }
   return null;
 }
 
