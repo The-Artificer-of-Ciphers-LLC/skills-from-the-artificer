@@ -85,6 +85,11 @@
               "else": "Resolve the conflict by rebasing onto the base and re-verifying — a rebase changes the sha and invalidates the prior pass. A genuinely unresolvable conflict parks the issue.\n\nAdmin merge CANNOT bypass a merge conflict: that and a red check are the two cases where it is forbidden outright."
             },
             {
+              "path": "findings_not_fixed",
+              "every": { "path": "issue", "integer": true, "min": 1 },
+              "else": "A finding you surfaced has no tracked issue.\n\nEvery entry in `findings_not_fixed` needs a real issue NUMBER. A description in the PR body is not a disposition — once this merges the PR is archive, nobody queries it, and the finding is gone. \"Happy to open a follow-up issue on request\" is the exact failure this blocks.\n\nTwo ways forward, and only two:\n  1. Fix it inline — the default, and it overrides one-concern-per-PR.\n  2. File it, THEN merge, and put the returned number in `issue` here.\n\n\"Too big to fold in\" is a reason to FILE, never a reason to merely mention: if it is large enough to justify its own PR, it is large enough to justify its own issue, and the issue is the cheaper half. An empty array is the normal case."
+            },
+            {
               "when": "(^|\\s)--admin(\\s|$)",
               "path": "merge.admin_reason",
               "equals": "missing-secondary-reviewer",

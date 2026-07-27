@@ -122,6 +122,32 @@ run "green:true but failing non-empty" deny  "$(bash_ 'gh pr merge 42 --squash')
 CFL='{"pr":42,"checks":{"green":true,"failing":[]},"mergeable":"CONFLICTING","merge":{"admin":true,"admin_reason":"missing-secondary-reviewer"}}'
 printf '%s' "$CFL" > $S
 run "CONFLICTING + --admin (MUST deny)" deny "$(bash_ 'gh pr merge 42 --squash --admin')"
+
+echo "== bugfix family: a finding may not survive as prose =="
+F='"pr":42,"checks":{"green":true,"failing":[]},"mergeable":"MERGEABLE","merge":{"admin":false}'
+printf '%s' "{$F}" > $S
+run "findings_not_fixed absent (normal)"   allow "$(bash_ 'gh pr merge 42 --squash')"
+printf '%s' "{$F,\"findings_not_fixed\":[]}" > $S
+run "empty array"                          allow "$(bash_ 'gh pr merge 42 --squash')"
+printf '%s' "{$F,\"findings_not_fixed\":[{\"summary\":\"x\",\"issue\":2731}]}" > $S
+run "real issue number"                    allow "$(bash_ 'gh pr merge 42 --squash')"
+printf '%s' "{$F,\"findings_not_fixed\":[{\"summary\":\"x\",\"issue\":null}]}" > $S
+run "issue: null"                          deny  "$(bash_ 'gh pr merge 42 --squash')"
+printf '%s' "{$F,\"findings_not_fixed\":[{\"summary\":\"x\"}]}" > $S
+run "issue omitted"                        deny  "$(bash_ 'gh pr merge 42 --squash')"
+printf '%s' "{$F,\"findings_not_fixed\":[{\"summary\":\"x\",\"issue\":\"follow-up\"}]}" > $S
+run "issue is a prose promise"             deny  "$(bash_ 'gh pr merge 42 --squash')"
+printf '%s' "{$F,\"findings_not_fixed\":[{\"summary\":\"x\",\"issue\":\"2731\"}]}" > $S
+run "issue is a numeric STRING"            deny  "$(bash_ 'gh pr merge 42 --squash')"
+printf '%s' "{$F,\"findings_not_fixed\":[{\"summary\":\"x\",\"issue\":0}]}" > $S
+run "issue: 0"                             deny  "$(bash_ 'gh pr merge 42 --squash')"
+printf '%s' "{$F,\"findings_not_fixed\":[{\"summary\":\"a\",\"issue\":11},{\"summary\":\"b\"}]}" > $S
+run "one filed, one not"                   deny  "$(bash_ 'gh pr merge 42 --squash')"
+printf '%s' "{$F,\"findings_not_fixed\":{\"summary\":\"x\"}}" > $S
+run "not an array at all"                  deny  "$(bash_ 'gh pr merge 42 --squash')"
+printf '%s' "{\"pr\":42,\"checks\":{\"green\":false,\"failing\":[\"x\"]},\"mergeable\":\"MERGEABLE\",\"merge\":{\"admin\":false},\"findings_not_fixed\":[]}" > $S
+run "red ci still wins over clean findings" deny "$(bash_ 'gh pr merge 42 --squash')"
+
 printf '%s' "$ADM" > $S
 
 echo "== bugfix family: queue advance =="
