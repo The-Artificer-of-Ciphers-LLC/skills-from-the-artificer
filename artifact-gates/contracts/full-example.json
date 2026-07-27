@@ -1,0 +1,169 @@
+{
+  "_comment": [
+    "Worked example: three directives, three failure modes, three contracts.",
+    "Copy to <repo-root>/.artifact-gate.json and adapt. The families are independent —",
+    "delete the ones you don't run. Every `message` is the text an agent sees at the",
+    "moment it is blocked, so it is worth writing them as instructions, not scoldings."
+  ],
+
+  "exempt": ["^\\.claude/", "^\\.gsd/"],
+
+  "families": [
+    {
+      "_comment": "A feature/implementation directive. Failure mode: DESIGN steps get skipped, because thinking produces nothing observable.",
+      "name": "feature",
+      "scope": "branch",
+      "dir": ".gsd/phase/{slug}",
+      "arm": "00-run.json",
+      "gates": [
+        {
+          "on": "edit",
+          "paths": ["src/**"],
+          "requires": "40-design.md",
+          "message": "Step 4 (design) produced no artifact.\n\nRun the design step and write its output there:\n  /rubber-duck                 — walk the logic, surface edge cases\n  /grilling                    — attack the design BEFORE it is code\n  /skills-from-the-artificer   — which laws apply (Hyrum, Gall, Conway)\n\nRequired sections: Behavior table (one row per input class — the row SET is the deliverable) · Negative space (what legitimately looks like your trigger condition and must NOT fire) · Blast radius · Laws that apply · Rejected alternatives · Known limits.\n\nA design step that produces nothing is indistinguishable from a design step that was skipped."
+        },
+        {
+          "on": "edit",
+          "paths": ["test/**", "tests/**"],
+          "requires": "50-test-matrix.md",
+          "message": "Step 5 (QA matrix) produced no artifact.\n\nWrite the enumerated matrix first: one row per INPUT CLASS, categories happy / boundary (limit-1, limit, limit+1) / negative / hostile / independence.\n\nEnumerating the input space on paper is what catches the classes that reach CI otherwise — valid-JSON-that-is-not-an-object, a lone `---` that is a horizontal rule, the CRLF variant. Writing tests for the code you just wrote finds none of them."
+        },
+        {
+          "on": "bash",
+          "match": "(^|[\\s;|&])git(\\s+-[^\\s]+)*\\s+push(\\s|$)",
+          "requires": "60-review.json",
+          "message": "Step 6 (orthogonal review) produced no artifact.\n\nRun BOTH engines and record findings + dispositions:\n  /code-review       — correctness, logic, edge cases (the named skill, not an ad-hoc agent)\n  /security-review   — injection, secrets, traversal, unsafe argv\n  at least one in an isolated reviewer context that did not author the change\n\nShape: {\"engines\":[{\"name\":\"code-review\",\"isolated\":false,\"findings\":[{\"severity\":\"\",\"summary\":\"\",\"disposition\":\"\"}]}]}\n\nThis replaces a self-attestation token with something checkable: such a token asserts the reviews happened, which is exactly the claim that cannot be verified."
+        }
+      ]
+    },
+
+    {
+      "_comment": "An unattended bug-sweep directive. Failure modes: stopping at 'PR opened', and silently dropping the rest of the queue after one hard issue.",
+      "name": "bugfix",
+      "scope": "branch",
+      "dir": ".gsd/bug/{slug}",
+      "arm": "00-run.json",
+      "gates": [
+        {
+          "on": "edit",
+          "paths": ["src/**"],
+          "requires": "10-diagnosis.md",
+          "message": "Diagnosis produced no artifact.\n\nA fix written before the root cause is written down is a guess with a diff attached.\n\nRequired sections: Reproduction (exact command + observed output) · Root cause (`file:line`, located not suspected) · Introduced by · Blast radius · Must-Have Acceptance Checklist (verbatim from the issue) · Not-the-bug negative space (what legitimately looks like this symptom and must keep working) · Rejected fixes.\n\nThe last two pay for themselves: without negative space you ship an over-broad fix, and a fix with no rejected alternative was not chosen — it was the first thing that came to mind."
+        },
+        {
+          "on": "edit",
+          "paths": ["test/**", "tests/**"],
+          "requires": "50-test-matrix.md",
+          "message": "QA matrix produced no artifact.\n\nRow 1 is the failing-first regression test, and its `RED proven (sha)` cell carries the run where it actually failed. \"The test failed first\" is a claim; the sha is evidence."
+        },
+        {
+          "on": "bash",
+          "match": "(^|[\\s;|&])git(\\s+-[^\\s]+)*\\s+push(\\s|$)",
+          "requires": "60-review.json",
+          "message": "Two orthogonal reviews, at least one isolated, recorded with a disposition per finding. `not-a-defect` requires the proof, not the assertion."
+        },
+        {
+          "_comment": "Contents-checked, not presence-checked. This is where merge policy stops being prose.",
+          "on": "bash",
+          "match": "\\bgh\\s+pr\\s+merge\\b",
+          "requires": "80-ship.json",
+          "message": "This directive ends at MERGE, not at \"PR opened\" — so the merge is where the evidence is demanded.\n\nShape:\n  {\"pr\":123,\"checks\":{\"green\":true,\"failing\":[]},\"mergeable\":\"MERGEABLE\",\n   \"verdict_sha\":\"<sha the suite passed on>\",\n   \"merge\":{\"method\":\"squash\",\"admin\":false,\"admin_reason\":null}}\n\nRecord the CI state you OBSERVED, not the state you expect.",
+          "assert": [
+            {
+              "path": "checks.green",
+              "equals": true,
+              "else": "A red check is a defect — yours, regardless of which file it points at. Diagnose the mechanism, fix the root cause, re-run the suite on the new sha, push, re-watch. A failure that does not reproduce is not a flake; it is a defect concealing itself.\n\nAdmin merge CANNOT bypass this. If it stays red after genuine remediation, park the issue with the evidence and take the next one."
+            },
+            {
+              "path": "checks.failing",
+              "empty": true,
+              "else": "`checks.green` says true but `checks.failing` is non-empty. Resolve the contradiction against `gh pr checks` before merging."
+            },
+            {
+              "path": "mergeable",
+              "notEquals": "CONFLICTING",
+              "else": "Resolve the conflict by rebasing onto the base and re-verifying — a rebase changes the sha and invalidates the prior pass. A genuinely unresolvable conflict parks the issue.\n\nAdmin merge CANNOT bypass a merge conflict: that and a red check are the two cases where it is forbidden outright."
+            },
+            {
+              "when": "(^|\\s)--admin(\\s|$)",
+              "path": "merge.admin_reason",
+              "equals": "missing-secondary-reviewer",
+              "else": "Admin merge has exactly ONE sanctioned use: bypassing the missing-secondary-reviewer / self-review requirement. To use it, record that plainly:\n\n  \"merge\": { \"admin\": true, \"admin_reason\": \"missing-secondary-reviewer\" }\n\nThat is the only accepted value. It may never stand in for a red check or a merge conflict — both are already denied above."
+            },
+            {
+              "when": "(^|\\s)--admin(\\s|$)",
+              "path": "merge.admin",
+              "equals": true,
+              "else": "The command passes --admin but the ship record says `admin: false`. Make the record match the action you are taking."
+            }
+          ]
+        },
+        {
+          "_comment": "The next issue cannot start until this one is recorded. Catches queue abandonment.",
+          "on": "bash",
+          "match": "(^|[\\s;|&])git(\\s+-[^\\s]+)*\\s+checkout\\s+(-b|-B)(\\s|$)",
+          "requires": "/.gsd/bug/queue.json",
+          "message": "Shape: {\"issues\":[{\"issue\":123,\"branch\":\"fix/123-slug\",\"state\":\"merged|parked|skipped|closed\",\"reason\":\"<required when parked>\",\"pr\":456}]}\n\nThe parked log is the one deliverable of an unattended sweep that nobody is awake to read. As a promise in a final report it is unfalsifiable; as a file it is the thing the next branch depends on.",
+          "assert": [
+            {
+              "path": "issues[issue={arm.issue}].state",
+              "in": ["merged", "parked", "skipped", "closed"],
+              "else": "This issue has no terminal state in the queue, so the next issue cannot start.\n\nParking is a legitimate outcome and never halts the sweep — but an issue left with no recorded state is indistinguishable from one that was quietly abandoned. Record `merged`, `parked` (with a reason), `skipped`, or `closed`."
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "_comment": "A triage directive. Edits no code, so its gates sit on OUTWARD writes. Repo-scoped, so it needs an explicit disarm.",
+      "name": "triage",
+      "scope": "repo",
+      "dir": ".gsd/triage",
+      "arm": "00-run.json",
+      "disarm": "90-summary.md",
+      "gates": [
+        {
+          "on": "bash",
+          "match": "\\bgh\\s+issue\\s+(comment|edit|close|reopen)\\b|\\bgh\\s+api\\b.*\\/issues\\/\\d+",
+          "requires": "10-worklist.md",
+          "message": "Persist the working set BEFORE disposing of anything: one row per issue with # · title · current labels · age · classification · disposition — including the ones you will skip.\n\nA sweep that starts writing before it has enumerated what it is sweeping cannot report at the end which issues it never reached."
+        },
+        {
+          "_comment": "The highest-consequence write: this label tells an unattended agent to start writing code, and it does not re-verify.",
+          "on": "bash",
+          "match": "\\bgh\\s+issue\\s+(comment|edit|close|reopen)\\b",
+          "when": "confirmed-bug",
+          "capture": {
+            "pattern": "gh\\s+issue\\s+(?:comment|edit|close|reopen)\\s+#?(\\d+)",
+            "as": "n",
+            "hint": "Pass the issue number positionally (`gh issue edit 1234 --add-label confirmed-bug`) so the gate can require the matching diagnosis."
+          },
+          "requires": "20-diagnosis/{n}.md",
+          "message": "`confirmed-bug` means \"reproduced, root-caused, ready for an agent to write the fix\" — and that agent acts on it without re-verifying.\n\nRequired sections: Reproduced (evidence — if you did not, this label is wrong) · Root cause (exact file:line) · **Tool calls made** (one line per call: tool -> what it returned) · Introduced by · Blast radius · Coupled symbols · Regression test to write first · Negative space.\n\nThe tool-calls section is the point: a grep-only guess shows up as an empty section instead of a confident label."
+        },
+        {
+          "on": "bash",
+          "match": "\\bgh\\s+api\\b.*\\/issues\\/\\d+",
+          "when": "confirmed-bug",
+          "capture": { "pattern": "\\/issues\\/(\\d+)", "as": "n" },
+          "requires": "20-diagnosis/{n}.md",
+          "message": "Same gate as the `gh issue edit` form — routing the label through the API does not change what it authorizes."
+        },
+        {
+          "on": "bash",
+          "match": "\\bgh\\s+issue\\s+close\\b",
+          "capture": { "pattern": "gh\\s+issue\\s+close\\s+#?(\\d+)", "as": "n" },
+          "requiresAnyOf": ["20-diagnosis/{n}.md", "30-decisions.json"],
+          "message": "Closing an issue is terminal and outward, so it needs a recorded basis: a diagnosis (defect lane — not-a-bug / already-fixed) or a decision record (enhancement / feature lane).\n\nShape: {\"decisions\":[{\"issue\":123,\"lane\":\"enhancement\",\"verdict\":\"deny\",\"source\":\"AskUserQuestion\",\"rationale\":\"...\"}]}\n\n`source` is the load-bearing field: this lane exists to give the maintainer a decision, not to make it for them. If you did not ask, there is no verdict to record and no close to perform."
+        },
+        {
+          "on": "bash",
+          "match": "\\bgh\\s+pr\\s+create\\b",
+          "requires": "40-oos-queue.json",
+          "message": "Shape: {\"entries\":[{\"issue\":123,\"slug\":\"thing.md\",\"written\":true}]}  — an empty `entries` array is a valid answer and still gets recorded.\n\nA denied ask whose reasoning exists ONLY in a closed-issue comment is invisible to the next run's prior-denial check, so the same request returns and gets re-litigated from scratch. Recording `{\"entries\":[]}` is not skipping this step — it is completing it."
+        }
+      ]
+    }
+  ]
+}
