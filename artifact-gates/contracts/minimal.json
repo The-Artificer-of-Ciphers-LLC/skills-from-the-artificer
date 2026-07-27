@@ -1,0 +1,39 @@
+{
+  "_comment": [
+    "Starter contract — one family, three gates, the classic design/test/review spine.",
+    "Copy to <repo-root>/.artifact-gate.json, adjust the paths to your layout, and start a run by",
+    "writing .workflow/<branch-slug>/00-run.json. Nothing is enforced until that file exists.",
+    "",
+    "Adapt the `message` fields to name YOUR skills and YOUR required sections — they are the only",
+    "text an agent sees at the moment it is blocked, so they carry the whole instruction."
+  ],
+
+  "families": [
+    {
+      "name": "workflow",
+      "scope": "branch",
+      "dir": ".workflow/{slug}",
+      "arm": "00-run.json",
+      "gates": [
+        {
+          "on": "edit",
+          "paths": ["src/**", "lib/**"],
+          "requires": "10-design.md",
+          "message": "Design produced no artifact, so implementation is blocked.\n\nRequired sections, each non-empty:\n  ## Behavior table   — one row per input class AND per reachable path; the row set is the deliverable\n  ## Negative space   — what legitimately resembles your trigger condition and must NOT fire\n  ## Rejected         — alternatives considered and why not\n  ## Known limits     — what this deliberately does not fix\n\nA path you do not list here is a path you will not implement and will not test."
+        },
+        {
+          "on": "edit",
+          "paths": ["test/**", "tests/**", "**/*.test.*", "**/*.spec.*"],
+          "requires": "20-test-matrix.md",
+          "message": "The test matrix precedes the tests — that ordering is the entire point of this gate.\n\n  | # | Input class | Category | Expected | Test name | Covered? |\n\nCategories: happy / boundary (limit-1, limit, limit+1) / negative / hostile / independence.\nOne row per INPUT CLASS, not per test you intend to write.\n\nDerive the rows from the design's behavior table and negative space, then extend. Writing tests for the code you just wrote finds none of the classes that actually reach CI."
+        },
+        {
+          "on": "bash",
+          "match": "(^|[\\s;|&])git(\\s+-[^\\s]+)*\\s+push(\\s|$)",
+          "requires": "30-review.json",
+          "message": "Review produced no artifact, so the push is blocked.\n\nShape:\n  {\"engines\":[{\"name\":\"code-review\",\"isolated\":false,\n               \"findings\":[{\"severity\":\"blocker|major|minor\",\"summary\":\"...\",\n                            \"disposition\":\"fixed <sha>|not-a-defect: <proof>\"}]}]}\n\nAt least one engine should run in a context that did not author the change. Every finding needs a disposition, and `not-a-defect` needs the proof rather than the assertion."
+        }
+      ]
+    }
+  ]
+}

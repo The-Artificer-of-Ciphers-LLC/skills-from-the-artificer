@@ -12,7 +12,24 @@ A collection of [Claude Code](https://docs.claude.com/en/docs/claude-code/overvi
 | [`rubber-duck/`](rubber-duck/) | Interactive rubber-duck debugging session. Forces you to reconstruct your mental model of the bug from scratch, which is where the bug usually surfaces. |
 | [`test-first-bugfix/`](test-first-bugfix/) | Test-driven bug fixing — reproduce the bug as a failing test before you touch the fix. Catches "fixes" that don't actually fix anything and prevents regressions. |
 | [`trust-but-verify/`](trust-but-verify/) | Re-validates every claim a subagent hands back against a primary source — the code, docs/ADRs, the memory dir, context7, or a language spec — before you act on it. Treats a report as a lead, not a fact: nothing is verified until a source was opened and quoted. |
+| [`artifact-gates/`](artifact-gates/) | **Makes workflow steps enforceable.** A step that produces no artifact cannot be enforced, and will be skipped — so each blocking step writes a file, and the next action is denied until that file exists. Ships a config-driven PreToolUse hook, two example contracts, and a 58-case behavioral suite. Turns self-attestation ("I ran the review") and prose policy ("admin-merge only for a missing reviewer") into machine-checked preconditions. |
 | [`ci-preflight/`](ci-preflight/) | Pre-push checklist that prevents CI whiplash — multiple red pushes that could have been caught locally. Guards against three anti-patterns: missing registration surfaces when adding new shipped files, skipping `npm test` before pushing, and guessing at cross-platform fixes instead of diagnosing the root cause. |
+
+## Commands
+
+[`commands/`](commands/) holds workflow directives as Claude Code **slash commands** —
+`/feature-builder`, `/bug-fixer`, `/triage-review`, `/review-open-prs`. These replace the former
+`directives/` folder: same procedures, now invocable rather than pasted, with frontmatter declaring
+the tools each may touch.
+
+```bash
+cp commands/*.md ~/.claude/commands/
+```
+
+They are written against one project's toolchain (its test runner, label vocabulary, and controlling
+files) and are a starting shape rather than a drop-in — see [`commands/README.md`](commands/README.md)
+for what to adapt. Three of them depend on [`artifact-gates/`](artifact-gates/) for enforcement;
+without that hook their artifact contracts are just prose.
 
 ### Laws of software (24 reference skills)
 
@@ -84,6 +101,16 @@ mkdir -p ~/.claude/skills/cost-tier-routing ~/.claude/agents
 cp SKILL.md ~/.claude/skills/cost-tier-routing/
 cp agents/*.md ~/.claude/agents/
 ```
+
+## Install (skills that ship hooks too)
+
+`cost-routing/` and `artifact-gates/` include a hook that must land in `~/.claude/hooks/` **and** be
+registered under `PreToolUse` in `settings.json`. Each has a `README.md` with the exact snippet.
+
+An unregistered hook — or one registered with a path your Claude Code version does not expand —
+fails open **silently**, and that looks exactly like a hook that is working and has nothing to
+complain about. `artifact-gates/` ships `test/gate-test.sh` so you can prove the engine works before
+trusting it; confirm the wiring separately by triggering a gate on purpose.
 
 ## How skills work
 

@@ -1,0 +1,47 @@
+{
+  "skill_name": "artifact-gates",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "I wrote a long workflow directive with eight steps marked [BLOCKING] and the agent just... skipped most of them. It did the ones that produce code and ignored the design review, the QA matrix, and the security pass. They're all marked ABSOLUTE. What am I doing wrong?",
+      "expected_output": "Should identify the pattern rather than suggesting stronger wording: the skipped steps are exactly the ones whose output is unobservable, so doing them and claiming them are indistinguishable. Should state the rule — a step that produces no artifact cannot be enforced, and will be skipped — and explain that a directive is read once before any work exists while a hook fires at the instant of the action. Should propose giving each blocking step a file it must produce and gating the NEXT action on that file. Should NOT recommend adding more emphasis, capitals, or repetition to the prose.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "My agent reports that it ran /code-review and /security-review before every PR, but reviewers keep finding blockers it should have caught. How do I make it actually run them?",
+      "expected_output": "Should diagnose this as self-attestation — the claim 'I ran the review' is exactly the claim that cannot be verified — and propose replacing it with a review artifact gated on `git push`. Should specify a shape that is expensive to fake and cheap to check: one entry per engine, an `isolated` flag, findings with severity and a per-finding disposition where `not-a-defect` carries the proof rather than the assertion. Should note that an empty findings array on a non-trivial diff is a claim worth doubting.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I want to enforce that admin merge can only ever be used to bypass a missing second reviewer — never a red CI check and never a merge conflict. Right now it's just a rule in CLAUDE.md.",
+      "expected_output": "Should propose a contents-checked gate on `gh pr merge` rather than a presence-only one: a ship record asserting `checks.green == true`, `checks.failing` empty, and `mergeable != CONFLICTING`, all evaluated BEFORE any --admin handling so the flag cannot reach past them. Then a conditional assertion — when the command matches --admin, require `admin_reason` to equal exactly `missing-secondary-reviewer`. Should note that the record must capture the observed CI state, and that writing a value you did not observe to clear the gate is falsification rather than a workaround.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Add a hook that blocks any edit to src/ unless a design doc exists. I want it on for the whole repo.",
+      "expected_output": "Should build the gate but push back on 'the whole repo': a gate that fires on every edit gets switched off within a day, and a disabled gate enforces nothing. Should propose arming it per-run with an arm file so ordinary ad-hoc work is unaffected, and the gate exists only inside a directive run. Should also warn that a presence-only design-doc gate invites a one-line file, and specify required sections — behavior table, negative space, rejected alternatives — so the artifact is worth demanding.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "My unattended bug-fixing sweep keeps stopping after it opens the first PR, and sometimes it just abandons the rest of the queue overnight. The directive says explicitly that it must merge and must continue.",
+      "expected_output": "Should recognize both failures as unobservable-step failures in an unattended context where nobody is awake to read the final report. Should propose two gates: a ship record gating `gh pr merge` so the run cannot end at 'PR opened', and a queue file with a terminal state per issue gating the next `git checkout -b` so the next issue cannot start until this one's outcome is on disk. Should stress that a denial is not a request for human input — the agent writes the artifact and continues — because misreading a denial as 'I am blocked, I should ask' is what kills an unattended sweep.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Our triage command sets a `confirmed-bug` label that tells an AFK agent to start writing a fix. Sometimes the label goes on with nothing behind it but a grep.",
+      "expected_output": "Should identify the label as the highest-consequence write in that workflow, because a downstream agent acts on it without re-verifying, and gate the label write itself on a per-issue diagnosis artifact keyed by the issue number captured out of the command. Should specify a required 'tool calls made' section listing each call and what it returned, on the grounds that a grep-only guess then shows up as an empty section instead of a confident label. Should also cover the `gh api` route to the same mutation, since gating only `gh issue edit` leaves it open.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "What should go in the design artifact? I don't want it to just become a box-ticking file.",
+      "expected_output": "Should focus on shapes that cannot be produced without doing the work, not on length: enumerations where the row set is the deliverable (one row per input class and per reachable path); negative space, meaning what legitimately resembles the trigger condition and must NOT fire; and rejected alternatives, since a design with no rejected alternative was not designed. Should be honest that the hook can only check existence and only the author can make the file honest — the gate's job is to make skipping visible and deliberate rather than free and silent.",
+      "files": []
+    }
+  ]
+}
