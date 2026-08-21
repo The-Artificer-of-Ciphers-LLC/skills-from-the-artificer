@@ -1,7 +1,7 @@
 ---
 description: Batch-triage every open needs-triage + needs-reproduction issue, Memtrace-first. Route by classification — defect → diagnose + Agent Brief + confirmed-bug (ready for agent); enhancement → interactive digest + prior-denial check + your approve/deny; feature request → augmented Feature Review Report + your Go/No-go.
 argument-hint: "[--repo owner/repo] [--issue N] [--defects-only] [--skip-needs-info] [--dry-run] [--limit N]"
-allowed-tools: Bash, Read, Write, Grep, Glob, AskUserQuestion, mcp__memtrace__list_indexed_repositories, mcp__memtrace__find_code, mcp__memtrace__find_symbol, mcp__memtrace__get_symbol_context, mcp__memtrace__get_impact, mcp__memtrace__preflight_check, mcp__memtrace__get_evolution, mcp__memtrace__get_timeline, mcp__memtrace__get_cochange_context, mcp__memtrace__get_service_diagram, mcp__memtrace__get_api_topology, mcp__memtrace__list_communities, mcp__memtrace__find_central_symbols, mcp__memtrace__index_directory, mcp__context7__resolve-library-id, mcp__context7__query-docs, WebSearch, WebFetch
+allowed-tools: Bash, Read, Write, Grep, Glob, AskUserQuestion, mcp__context7__resolve-library-id, mcp__context7__query-docs, WebSearch, WebFetch, mcp__memtrace__index_directory, mcp__memtrace__list_indexed_repositories, mcp__memtrace__check_job_status, mcp__memtrace__list_jobs, mcp__memtrace__get_repository_stats, mcp__memtrace__watch_directory, mcp__memtrace__list_watched_paths, mcp__memtrace__unwatch_directory, mcp__memtrace__list_worktrees, mcp__memtrace__cleanup_worktrees, mcp__memtrace__cleanup_stale_records, mcp__memtrace__cleanup_episodes, mcp__memtrace__embed_diag, mcp__memtrace__mem_diag, mcp__memtrace__embed_reset_breaker, mcp__memtrace__find_code, mcp__memtrace__find_symbol, mcp__memtrace__get_source_window, mcp__memtrace__get_directory_tree, mcp__memtrace__analyze_relationships, mcp__memtrace__get_symbol_context, mcp__memtrace__get_impact, mcp__memtrace__preflight_check, mcp__memtrace__find_dead_code, mcp__memtrace__find_duplicate_code, mcp__memtrace__calculate_cyclomatic_complexity, mcp__memtrace__find_most_complex_functions, mcp__memtrace__get_function_quality_metrics, mcp__memtrace__find_hotspots, mcp__memtrace__get_style_fingerprint, mcp__memtrace__review_agent_sessions, mcp__memtrace__find_ast_review_issues, mcp__memtrace__find_yaml_rule_matches, mcp__memtrace__find_cross_module_issues, mcp__memtrace__find_code_review_issues, mcp__memtrace__review_github_pr, mcp__memtrace__replay_history, mcp__memtrace__get_daily_briefing, mcp__memtrace__get_evolution, mcp__memtrace__get_timeline, mcp__memtrace__detect_changes, mcp__memtrace__get_changes_since, mcp__memtrace__get_cochange_context, mcp__memtrace__get_episode_replay, mcp__memtrace__record_external_episode, mcp__memtrace__find_api_endpoints, mcp__memtrace__find_api_calls, mcp__memtrace__get_api_topology, mcp__memtrace__link_repositories, mcp__memtrace__get_service_diagram, mcp__memtrace__list_processes, mcp__memtrace__get_process_flow, mcp__memtrace__list_communities, mcp__memtrace__find_central_symbols, mcp__memtrace__find_dependency_path, mcp__memtrace__find_bridge_symbols, mcp__memtrace__get_codebase_briefing, mcp__memtrace__fleet_status, mcp__memtrace__fleet_branch_context, mcp__memtrace__fleet_preflight, mcp__memtrace__fleet_publish_intent, mcp__memtrace__fleet_record_episode, mcp__memtrace__fleet_get_node_state, mcp__memtrace__fleet_query_episodes, mcp__memtrace__fleet_acquire_lease, mcp__memtrace__fleet_release_lease, mcp__memtrace__fleet_renew_lease, mcp__memtrace__fleet_get_episode, mcp__memtrace__fleet_list_escalations, mcp__memtrace__fleet_get_escalation, mcp__memtrace__fleet_submit_verdict, mcp__memtrace__fleet_resolve_escalation, mcp__memtrace__fleet_ydoc_append, mcp__memtrace__fleet_ydoc_read, mcp__memtrace__fleet_audit, mcp__memtrace__recall_decision, mcp__memtrace__why_is_this_here, mcp__memtrace__governing_contracts, mcp__memtrace__verify_intent, mcp__memtrace__get_arc, mcp__memtrace__search_docs, mcp__memtrace__ask_docs, mcp__memtrace__read_doc
 ---
 
 <objective>
@@ -89,22 +89,142 @@ graph (callers, blast radius, history) that grep cannot. Fall back to Read/Grep 
 config/prose files, file-inventory questions, paths outside every indexed repo, or reading
 the exact span Memtrace already returned.
 
-Triage/diagnose tool chain (confirmed against Memtrace docs `mcp/tools`):
+Skills are `/memtrace-skills:<name>` — `memtrace-first` routes discovery,
+`memtrace-incident-investigation` traces a symptom to its origin, `memtrace-decision-memory`
+answers "was this deliberate?", `memtrace-session-continuity` catches up on a stale queue,
+`memtrace-docs` answers "what does this Memtrace tool actually do?". Graph/analysis
+**primitives are MCP tools** named `mcp__memtrace__<tool>` — call them directly, never as
+skills.
+
+Triage tool chain (confirmed against Memtrace docs `mcp/tools`, 2026-08-08):
+
+**Orient — once per sweep, before the first issue**
 
 | Need | Tool |
 |------|------|
-| Locate the symbol from an error string / symptom / name | `find_code` (NL + fuzzy), `find_symbol` (exact) |
+| Which repos exist, on what branch, how fresh | `list_indexed_repositories` (read `_meta`, see below) |
+| Substance check: node/edge counts by kind | `get_repository_stats` |
+| Is an index run still in flight / did it fail | `list_jobs`, `check_job_status` |
+| Repo shape before you know any symbol names | `get_codebase_briefing`, `get_directory_tree` |
+| What moved since the last sweep | `get_changes_since` (session anchor), `get_daily_briefing` |
+| Keep the graph live while you triage | `watch_directory` / `list_watched_paths` / `unwatch_directory` |
+| You are in a worktree — which overlay are you bound to | `list_worktrees`; `cleanup_worktrees` for stale ones |
+
+**Locate + confirm the defect**
+
+| Need | Tool |
+|------|------|
+| Locate the symbol from an error string / symptom / name | `find_code` (NL + fuzzy; `worktree`, `include_overlays`, `as_of`), `find_symbol` (exact, returns a blast-radius envelope) |
+| Read the exact span you were handed — do **not** open the whole file | `get_source_window` (`mode: raw\|lightweight\|aggressive\|map`) |
 | 360° context: callers, callees, community, process membership | `get_symbol_context` |
-| Blast radius + risk rating (Low/Med/High/Critical) | `get_impact` — or `preflight_check` for the one-call bundle |
-| Recent change history (is this a regression?) | `get_evolution` (between two points), `get_timeline` (one symbol's full history) |
+| One specific edge type (callers / callees / overrides / imports / type usages) | `analyze_relationships` (`query_type`) |
+| Trace the failing execution path end to end | `list_processes` → `get_process_flow` |
+| How do these two symbols even connect | `find_dependency_path` |
+
+**Blast radius + severity — this is what `confirmed-bug` hands the fixer**
+
+| Need | Tool |
+|------|------|
+| Blast radius + risk rating (Low/Med/High/Critical) | `get_impact` (`direction: upstream\|downstream\|both`) |
+| One-call bundle: impact + processes + co-change + complexity + churn + checklist | `preflight_check` |
 | Hidden coupling the call graph can't show | `get_cochange_context` |
-| Cross-repo / service wiring (feature-lane integration cost) | `get_service_diagram`, `get_api_topology` |
-| Architecture placement (feature-lane) | `list_communities`, `find_central_symbols` |
+| Architectural chokepoint? (high betweenness = wider blast than callers suggest) | `find_bridge_symbols`, `find_central_symbols` |
+| Scope a reporter-supplied diff/patch to real symbols | `detect_changes` |
+
+**Regression window — "when did this break?"**
+
+| Need | Tool |
+|------|------|
+| What changed between two points | `get_evolution` (`mode: recent\|compound\|summary`) |
+| One symbol's full version history, with AST hash for structural-vs-whitespace | `get_timeline` |
+| What exactly did that one commit touch | `get_episode_replay` (`mode: graph_summary` to size up a big commit) |
+| History window missing entirely | `replay_history` (re-runs replay without re-indexing or re-embedding) |
+
+**Was it deliberate? — Cortex, before you call something a defect**
+
+| Need | Tool |
+|------|------|
+| Is there a recorded decision, ban, or convention covering this | `recall_decision` |
+| Why does this symbol exist at all | `why_is_this_here` |
+| What contracts constrain it | `governing_contracts` |
+| Did the decision hold, or was it violated | `verify_intent` (`Held` / `ViolatedAt` / `CannotProve`) |
+| Which episodes implemented it | `get_arc` |
+
+A `CannotProve` is an honest "no evidence", **not** a licence to assume the behavior is
+accidental. Behavior a recorded decision explicitly chose is `wontfix`/by-design, not
+`confirmed-bug` — check Cortex **before** you apply the fix gate.
+
+**Corroborating quality signals — strengthens or kills a report**
+
+| Need | Tool |
+|------|------|
+| Is this a complexity × churn hotspot (i.e. a plausible bug site) | `find_hotspots` |
+| Measured complexity for the named function | `get_function_quality_metrics`, `calculate_cyclomatic_complexity` |
+| Worst offenders in the module | `find_most_complex_functions` |
+| "Unused / dead code" report — verify by graph reachability, not grep | `find_dead_code` |
+| "Copy-pasted / divergent logic" report | `find_duplicate_code` |
+| Does the reported code violate the repo's own norms | `get_style_fingerprint` (descriptive, not prescriptive) |
+| Reporter attached a diff/patch — run the deterministic detectors on it | `find_code_review_issues` (combined), `find_yaml_rule_matches` (multi-language rule pack), `find_cross_module_issues` (needs `repo_id`), `find_ast_review_issues` (**Python-only** — skip on a TS/JS diff) |
+| The issue links a GitHub PR | `review_github_pr` with **`post: false`** — triage never posts review comments |
+| Was a recent agent session the cause | `review_agent_sessions` |
+
+**Enhancement / feature lane**
+
+| Need | Tool |
+|------|------|
+| Cross-repo / service wiring (integration cost) | `get_service_diagram`, `get_api_topology`, `link_repositories` |
+| Our existing HTTP surface — does this already exist | `find_api_endpoints`, `find_api_calls` |
+| Architecture placement | `list_communities`, `find_central_symbols` |
+
+**Unsure what a tool does or what a parameter means?** `ask_docs` / `search_docs` /
+`read_doc` — the hosted product docs. Guessing a tool's semantics is guessing an API. These
+hit memtrace.io over HTTPS: send the question only, never repo source.
+
+**Fleet.** If other agents are working the same repo+branch, run `fleet_status` /
+`fleet_branch_context` before the sweep and `fleet_preflight` before any write. Triage writes
+labels and comments, not code, so it should almost never need a lease — but a sweep racing a
+`/bug-fixer` run on the same issue is exactly the collision `fleet_preflight` surfaces.
 
 **Zero results / missing language stats are NOT permission to silently grep.** First confirm
 scope with `list_indexed_repositories`; if the repo is unindexed or stale, index it
-(`index_directory`) or say so — then diagnose. Never label a bug `confirmed-bug` off a
-grep-only guess when Memtrace could have given you the graph.
+(`index_directory` → poll `check_job_status` to `done`) or say so — then diagnose. If you do
+fall back, **say which rung failed**. Never label a bug `confirmed-bug` off a grep-only guess
+when Memtrace could have given you the graph. **Memtrace never executes tests** — a graph
+verdict is not a reproduction.
+
+**Destructive tools.** `delete_repository` is deliberately **absent** from this command's
+tool set: nothing in triage justifies dropping a repository's graph, and an unattended sweep
+that "fixes" a confusing index by deleting it destroys hours of indexing. If an index looks
+corrupt, surface it and stop. `cleanup_episodes` mutates by default (`dry_run: false`) and
+marks the repo `needs_replay` — recovery-only, never routine hygiene. `cleanup_stale_records`
+defaults to `dry_run: true`; pass `false` only after reading the dry-run output.
+
+**Before any of that: assert you are bound to the right `.memdb`.** Every Memtrace response
+carries `_meta.data_dir`, `_meta.workspace_root` and `_meta.anchor_source`. Read them on your
+FIRST response. **`anchor_source: git_root` while `workspace_root` is your intended workspace means
+you are mis-bound** — reading a worktree-local store instead of the shared one, because data-dir
+resolution stops at a git worktree rather than ascending to the `.memtrace-workspace` marker. This
+command runs in worktrees, so it is the default failure, not an edge case.
+
+The reason this belongs at the top of a *triage* command specifically: **`confirmed-bug` is the fix
+gate.** A mis-bound store answers every graph query with "nothing found," which reads identically
+to "no callers, small blast radius" — so the diagnosis artifact fills in, the label goes on, and an
+AFK agent starts writing code against a blast radius that was never computed. `_meta.data_dir` is
+one field and it forecloses that entirely.
+
+A wrong store that already holds a repo or two returns a populated, healthy-looking list and does
+**not** set `_meta.empty_state_reason` — that guard fires only on an empty result. Do not infer
+health from a non-empty listing. (Verified 2026-08-07: a run read 3 repos from a stray store,
+concluded the target repo had been dropped from the index, and degraded 6 diagnoses to git-only
+evidence. The real index was intact the whole time.)
+
+If mis-bound: surface it and stop. **Do not `index_directory`** — that writes a full graph into the
+stray store. The fix is `MEMTRACE_MEMDB_DATA_DIR` + `MEMTRACE_DATA_DIR` on the MCP server
+registration, pointed at the canonical `.memdb`.
+
+**`edges_indexed: 0` on a `status: "completed"` index is a failed run.** Nodes with zero edges means
+no relationships resolved — `get_impact` returns nothing useful while reporting success. Never
+write a Blast radius section from a zero-edge index.
 </memtrace_first>
 
 <label_vocab>
