@@ -10,15 +10,25 @@ declares the tools each one is allowed to touch.
 | [`bug-fixer.md`](bug-fixer.md) | `Bug Remediation and Diag.md` | Sweeps confirmed defects unattended and runs each **through merge** — diagnosis → failing-first TDD → two orthogonal reviews → PR → CI watch → merge. A blocked issue parks with a reason; the sweep continues. |
 | [`triage-review.md`](triage-review.md) | `Feature Review Directive.md` | Batch-triages untriaged issues. Defects get a diagnosis + agent brief + `confirmed-bug`; enhancements and features get a maintainer decision recorded on the tracker. |
 | [`review-open-prs.md`](review-open-prs.md) | `PR Review.md` | Reviews every open PR you did not author, with graph-backed impact and cross-module passes. |
+| [`test.md`](test.md) | — | Runs the test suite on Mac, Linux Docker, and Windows Docker in parallel, then categorizes failures by which platforms they hit (all-fail = real bug; single-platform = environment-specific). |
 
 ## Install
+
+Symlink them so this repo stays the single source of truth — edits here take effect without a
+re-copy, and edits made while using a command land back in version control:
+
+```bash
+for f in "$PWD"/commands/*.md; do [ "$(basename "$f")" = README.md ] || ln -sfn "$f" ~/.claude/commands/; done
+```
+
+Or copy them, if you would rather fork and diverge:
 
 ```bash
 cp commands/*.md ~/.claude/commands/
 ```
 
 Restart Claude Code. They appear as `/feature-builder`, `/bug-fixer`, `/triage-review`,
-`/review-open-prs`.
+`/review-open-prs`, `/test`.
 
 ## Read this before running them
 
@@ -35,7 +45,7 @@ different repo will produce confident references to things you do not have. Adap
 - **The known-defect gauntlet** in `feature-builder.md` is a list of *that repo's* real recorded
   failures — Windows argv limits, config-key whitelists, path-separator normalization. Yours will be
   different. Keep the mechanism, replace the entries; a gauntlet of someone else's bugs is theater.
-- **Memtrace.** All four are Memtrace-first for code discovery, impact, and decision recall. Without
+- **Memtrace.** The four directives are Memtrace-first for code discovery, impact, and decision recall. Without
   it, the graph-backed steps degrade to grep — which the directives explicitly forbid, so either
   install it or rewrite those steps honestly rather than leaving instructions you intend to ignore.
 - **Label and branch vocabulary.** `confirmed-bug`, `needs-reproduction`, `.out-of-scope/`, and the
