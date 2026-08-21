@@ -1,8 +1,9 @@
 # commands
 
 Workflow directives as Claude Code **slash commands**. These replace the former `directives/`
-folder — same procedures, but invocable (`/bug-fixer`) instead of pasted, with frontmatter that
-declares the tools each one is allowed to touch.
+folder — same procedures, but invocable (`/bug-fixer`) instead of pasted. All but
+`review-open-prs.md` carry frontmatter declaring the tools they may touch; that one has never had
+any, so it runs with whatever your session already grants.
 
 | Command | Replaces | What it does |
 |---|---|---|
@@ -36,10 +37,13 @@ Restart Claude Code. They appear as `/feature-builder`, `/bug-fixer`, `/triage-r
 verbatim. Treat them as a strong starting shape, not a drop-in — running them unedited against a
 different repo will produce confident references to things you do not have. Adapt at minimum:
 
-- **The test runner.** Every gate keys on a remote dockerized runner (`gsd-test`) and its
+- **The test runner.** In `feature-builder.md` and `bug-fixer.md` — the two that write code — every
+  gate keys on a remote dockerized runner (`gsd-test`) and its
   `{"type":"verdict","outcome":"passed"}` line, including the rule that a passing verdict is bound to
   an exact commit sha. Substitute your own runner *and* its equivalent "this pass belongs to this
-  sha" evidence — that binding is the part that matters, not the tool.
+  sha" evidence — that binding is the part that matters, not the tool. `triage-review.md` and
+  `review-open-prs.md` never invoke it — they diagnose and report without editing, so there is
+  nothing to substitute there.
 - **The controlling files.** They defer to `CLAUDE.md` / `AGENTS.md` > `CONTRIBUTING.md` >
   `docs/adr/*` > `CONTEXT.md`. Repoint at yours.
 - **The known-defect gauntlet** in `feature-builder.md` is a list of *that repo's* real recorded
