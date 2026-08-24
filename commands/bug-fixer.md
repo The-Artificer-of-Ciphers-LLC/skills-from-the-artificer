@@ -413,11 +413,40 @@ Then set this issue's `queue.json` state to `in_progress`.
 **Publish this issue's fleet intent immediately after.**
 `fleet_publish_intent({ repo_id, agent_id: <you, from Phase A item 1>, branch: "$BASE_BRANCH",
 intent: {"bug_fix":{"defect":"logic_error"}}, assignment: "Remediating #<n>: <issue title>",
-touched: [<qualified symbols Step 0/1 identified>] })`. **`branch` is `$BASE_BRANCH` — never this
-issue's own branch** — same scope rule as Phase A item 1. `touched` may be empty this early;
-re-publish once diagnosis names the symbols. **Inspect the returned `active_conflicts`.** A
-non-empty conflict on your touched set means another agent is already in this code — set this
-issue to `needs-decision` rather than proceeding.
+touched: [<qualified symbols Step 0/1 identified>, <plus every SHARED FILE the fix will edit>] })`.
+**`branch` is `$BASE_BRANCH` — never this issue's own branch** — same scope rule as Phase A item 1.
+`touched` may be empty this early; re-publish once diagnosis names the symbols. **Inspect the
+returned `active_conflicts`.** A non-empty conflict on your touched set means another agent is
+already in this code — set this issue to `needs-decision` rather than proceeding.
+
+**`touched` must name SHARED FILES, not only symbols.** Fleet matches conflicts on the `touched`
+set, so a set listing only `src/foo.cts::bar` is invisible to a peer editing the same shared index,
+and that peer is invisible to you — Fleet answers **Class A, proceed** to both, and both walk into
+the same merge conflict. Append these whenever the fix will touch them: `docs/FEATURES.md`,
+`docs/COMMANDS.md`, `docs/INVENTORY.md`, `docs/README.md`, `CONTEXT.md`, `docs/CONFIGURATION.md`,
+`docs/AGENTS.md`, `gsd-core/workflows/_runtime-launcher.snippet.sh`. A bare path is a legal
+`touched` entry — it need not be a graph symbol.
+
+**LEASE a monotonic identifier before allocating one.** Intent alone cannot protect a counter: two
+agents can hold non-conflicting intents and still pick the same integer, because the collision is
+on a *value*, not a symbol. Before claiming a `### N.` section in `docs/FEATURES.md`, an ADR
+number, or any ordered registry row:
+
+```
+fleet_acquire_lease({ repo_id, agent_id,
+  scope: ["docs/FEATURES.md::section-number-allocation"], ttl_seconds: 1800 })
+→ { state: "granted", lease_id }        # or "requested" — queued; wait for the grant
+… allocate, write, commit …
+fleet_release_lease({ lease_id })       # next queued requester is granted automatically
+```
+
+`scope` takes arbitrary strings and is **not** validated against the graph (verified 2026-08-24 —
+a non-symbol token returned `granted`). This serializes *allocation* between Fleet-aware agents; it
+does **not** prevent a git conflict once two branches carry adjacent text, and it cannot reach a
+fork PR from a contributor who never calls Fleet. See `CONTRIBUTING.md` →
+"Adding a section to `docs/FEATURES.md`" for the human-facing rule, and prefer proposing the
+fragment-plus-renderer pattern (`.changeset/`, `tests/emitted-drift-acks/` #2914) over leasing the
+same counter forever.
 </step>
 
 <step name="0_context_init">

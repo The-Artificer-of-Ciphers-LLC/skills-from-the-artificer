@@ -785,7 +785,13 @@ code**. A single feature falls through this step with a one-item queue.*
    only when `MAX_PARALLEL_PRS>1`.** `mcp__memtrace__fleet_publish_intent({ repo_id, agent_id
    (from Step 0's `fleet_status`), branch: "$BASE_BRANCH", assignment: "Implementing #<child>:
    <title>" (name the parent epic too when it differs from the sub-issue), touched: [<this
-   deliverable's symbols>] })`. `branch` is `$BASE_BRANCH` — **never** this deliverable's own
+   deliverable's symbols>, <plus every SHARED FILE it will edit — see R7>] })`. **The shared files
+   are not optional and are the half most often omitted**: `docs/FEATURES.md`, `docs/COMMANDS.md`,
+   `docs/INVENTORY.md`, `CONTEXT.md`, and friends. Symbols alone leave you invisible to the peer
+   editing the same index, and them invisible to you — Fleet answers Class A to both and you meet
+   in the merge. If this deliverable will hand-allocate a monotonic id (a `### N.` section, an ADR
+   number), take the allocation lease from **R8** as well.
+   `branch` is `$BASE_BRANCH` — **never** this deliverable's own
    `<prefix>/<child>-slug` branch, which is a private, empty coordination pool (R1 in
    `<fleet_coordination>`); `assignment` is the only token a peer sweep can match to this issue
    (R2). It returns `impact_preview` (real blast radius) and `active_conflicts` (overlapping live
@@ -1311,6 +1317,49 @@ rules govern every fleet call below and every fleet call elsewhere in this direc
   version was materially better; both times a fetch immediately before writing would have caught
   it. Diagnosing a red lane is precisely when you have been heads-down longest and the base has
   moved furthest.
+
+- **R7 — `touched` must name the SHARED FILES you will edit, not only your source symbols.**
+  Fleet matches conflicts on the `touched` set. A set listing only `src/foo.cts::bar` is invisible
+  to a peer editing the same shared index, and that peer is invisible to you — Fleet then
+  correctly reports **Class A, proceed**, to both of you, and both walk into the same merge
+  conflict. Coordination did what it was told; it was told the wrong thing.
+
+  **Append these to `touched` whenever the deliverable will touch them**, in addition to the
+  symbols: `docs/FEATURES.md`, `docs/COMMANDS.md`, `docs/INVENTORY.md`, `docs/README.md`,
+  `CONTEXT.md`, `docs/CONFIGURATION.md`, `docs/AGENTS.md`,
+  `gsd-core/workflows/_runtime-launcher.snippet.sh`. A bare path is a legal `touched` entry — it
+  does not have to be a graph symbol.
+
+  Verified 2026-08-24 (#3146): the intent listed four `src/runtime-identity.cts::*` symbols and the
+  launcher snippet, but **not** `docs/FEATURES.md`. Three peers and that run each independently
+  claimed the next `### N.` section; the branch was renumbered 165 → 166 → 167 → 168 across
+  successive rebases — every one a conflict Fleet had the information to prevent and was never
+  asked about.
+
+- **R8 — LEASE a monotonic identifier before allocating one.** Intent alone is not enough for a
+  counter: two agents can hold non-conflicting intents and still pick the same integer, because the
+  collision is on a *value*, not a symbol. Take an exclusive lease on a synthetic allocation scope,
+  read the current maximum, write, commit, release:
+
+  ```
+  fleet_acquire_lease({ repo_id, agent_id,
+    scope: ["docs/FEATURES.md::section-number-allocation"], ttl_seconds: 1800 })
+  → { state: "granted", lease_id }        # or "requested" — queued; wait for the grant
+  … allocate, write, commit …
+  fleet_release_lease({ lease_id })       # next queued requester is granted automatically
+  ```
+
+  `scope` accepts arbitrary strings and is **not** validated against the graph (verified
+  2026-08-24 — a non-symbol token returned `granted`). Same shape for any hand-allocated monotonic
+  id: ADR numbers, `### N.` sections, ordered registry rows.
+
+  **Know its limits.** It serializes *allocation* between Fleet-aware agents. It does **not**
+  prevent the git conflict once two branches already carry adjacent text, and it cannot reach a
+  fork PR from a contributor who never calls Fleet. Where a surface is contended often enough to
+  matter, the durable fix is to stop hand-allocating: adopt the fragment-plus-renderer pattern this
+  repo already uses for `.changeset/` (three random words, so concurrent PRs cannot collide) and
+  for `tests/emitted-drift-acks/` (#2914). Prefer proposing that over leasing the same counter
+  forever.
 
 Invoke `/memtrace-skills:memtrace-fleet-first`. **None of these tools are billable.**
 
