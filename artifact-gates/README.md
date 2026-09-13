@@ -4,7 +4,7 @@
 
 Turns the blocking steps of a workflow directive into **preconditions**: each step writes a file,
 and the next action is denied until that file exists. Ships a config-driven PreToolUse hook, two
-example contracts, and a 58-case behavioral test suite.
+example contracts, and a 69-case behavioral test suite.
 
 Full rationale, contract schema, and design guidance: [`SKILL.md`](SKILL.md).
 
