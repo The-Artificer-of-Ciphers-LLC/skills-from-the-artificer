@@ -1,7 +1,7 @@
 ---
 description: Engineering Workflow Directive — Bug Remediation & Diagnostics. Sweeps every open confirmed-bug issue unattended, Memtrace-first, and runs each end to end THROUGH MERGE — diagnosis → failing-first TDD via gsd-test → two orthogonal reviews → PR → CI watch → merge. Per-issue artifact gates make each blocking step observable; an issue needing a judgment call halts and is raised with the user, and the sweep continues with the remaining issues.
 argument-hint: "[--repo owner/repo] [--base next] [--issue N] [--limit N] [--defects-only]"
-allowed-tools: Bash, Read, Write, Edit, Grep, Glob, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList, TaskGet, WebSearch, WebFetch, mcp__context7__resolve-library-id, mcp__context7__query-docs, mcp__memtrace__index_directory, mcp__memtrace__list_indexed_repositories, mcp__memtrace__check_job_status, mcp__memtrace__list_jobs, mcp__memtrace__get_repository_stats, mcp__memtrace__watch_directory, mcp__memtrace__list_watched_paths, mcp__memtrace__unwatch_directory, mcp__memtrace__list_worktrees, mcp__memtrace__cleanup_worktrees, mcp__memtrace__cleanup_stale_records, mcp__memtrace__cleanup_episodes, mcp__memtrace__embed_diag, mcp__memtrace__mem_diag, mcp__memtrace__embed_reset_breaker, mcp__memtrace__find_code, mcp__memtrace__find_symbol, mcp__memtrace__get_source_window, mcp__memtrace__get_directory_tree, mcp__memtrace__analyze_relationships, mcp__memtrace__get_symbol_context, mcp__memtrace__get_impact, mcp__memtrace__preflight_check, mcp__memtrace__find_dead_code, mcp__memtrace__find_duplicate_code, mcp__memtrace__calculate_cyclomatic_complexity, mcp__memtrace__find_most_complex_functions, mcp__memtrace__get_function_quality_metrics, mcp__memtrace__find_hotspots, mcp__memtrace__get_style_fingerprint, mcp__memtrace__review_agent_sessions, mcp__memtrace__find_ast_review_issues, mcp__memtrace__find_yaml_rule_matches, mcp__memtrace__find_cross_module_issues, mcp__memtrace__find_code_review_issues, mcp__memtrace__review_github_pr, mcp__memtrace__replay_history, mcp__memtrace__get_daily_briefing, mcp__memtrace__get_evolution, mcp__memtrace__get_timeline, mcp__memtrace__detect_changes, mcp__memtrace__get_changes_since, mcp__memtrace__get_cochange_context, mcp__memtrace__get_episode_replay, mcp__memtrace__record_external_episode, mcp__memtrace__find_api_endpoints, mcp__memtrace__find_api_calls, mcp__memtrace__get_api_topology, mcp__memtrace__link_repositories, mcp__memtrace__get_service_diagram, mcp__memtrace__list_processes, mcp__memtrace__get_process_flow, mcp__memtrace__list_communities, mcp__memtrace__find_central_symbols, mcp__memtrace__find_dependency_path, mcp__memtrace__find_bridge_symbols, mcp__memtrace__get_codebase_briefing, mcp__memtrace__fleet_status, mcp__memtrace__fleet_branch_context, mcp__memtrace__fleet_preflight, mcp__memtrace__fleet_publish_intent, mcp__memtrace__fleet_record_episode, mcp__memtrace__fleet_get_node_state, mcp__memtrace__fleet_query_episodes, mcp__memtrace__fleet_acquire_lease, mcp__memtrace__fleet_release_lease, mcp__memtrace__fleet_renew_lease, mcp__memtrace__fleet_get_episode, mcp__memtrace__fleet_list_escalations, mcp__memtrace__fleet_get_escalation, mcp__memtrace__fleet_submit_verdict, mcp__memtrace__fleet_resolve_escalation, mcp__memtrace__fleet_ydoc_append, mcp__memtrace__fleet_ydoc_read, mcp__memtrace__fleet_audit, mcp__memtrace__recall_decision, mcp__memtrace__why_is_this_here, mcp__memtrace__governing_contracts, mcp__memtrace__verify_intent, mcp__memtrace__get_arc, mcp__memtrace__search_docs, mcp__memtrace__ask_docs, mcp__memtrace__read_doc
+allowed-tools: Bash, Read, Write, Edit, Grep, Glob, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList, TaskGet, WebSearch, WebFetch, mcp__context7__resolve-library-id, mcp__context7__query-docs, mcp__memtrace__index_directory, mcp__memtrace__list_indexed_repositories, mcp__memtrace__check_job_status, mcp__memtrace__list_jobs, mcp__memtrace__get_repository_stats, mcp__memtrace__watch_directory, mcp__memtrace__list_watched_paths, mcp__memtrace__unwatch_directory, mcp__memtrace__list_worktrees, mcp__memtrace__cleanup_worktrees, mcp__memtrace__cleanup_stale_records, mcp__memtrace__cleanup_episodes, mcp__memtrace__embed_diag, mcp__memtrace__mem_diag, mcp__memtrace__embed_reset_breaker, mcp__memtrace__find_code, mcp__memtrace__find_symbol, mcp__memtrace__get_source_window, mcp__memtrace__get_directory_tree, mcp__memtrace__analyze_relationships, mcp__memtrace__get_symbol_context, mcp__memtrace__get_impact, mcp__memtrace__preflight_check, mcp__memtrace__find_dead_code, mcp__memtrace__find_duplicate_code, mcp__memtrace__calculate_cyclomatic_complexity, mcp__memtrace__find_most_complex_functions, mcp__memtrace__get_function_quality_metrics, mcp__memtrace__find_hotspots, mcp__memtrace__get_style_fingerprint, mcp__memtrace__review_agent_sessions, mcp__memtrace__find_ast_review_issues, mcp__memtrace__find_yaml_rule_matches, mcp__memtrace__find_cross_module_issues, mcp__memtrace__find_code_review_issues, mcp__memtrace__review_github_pr, mcp__memtrace__replay_history, mcp__memtrace__get_daily_briefing, mcp__memtrace__get_evolution, mcp__memtrace__get_timeline, mcp__memtrace__detect_changes, mcp__memtrace__get_changes_since, mcp__memtrace__get_cochange_context, mcp__memtrace__get_episode_replay, mcp__memtrace__record_external_episode, mcp__memtrace__find_api_endpoints, mcp__memtrace__find_api_calls, mcp__memtrace__get_api_topology, mcp__memtrace__link_repositories, mcp__memtrace__get_service_diagram, mcp__memtrace__list_processes, mcp__memtrace__get_process_flow, mcp__memtrace__list_communities, mcp__memtrace__find_central_symbols, mcp__memtrace__find_dependency_path, mcp__memtrace__find_bridge_symbols, mcp__memtrace__get_codebase_briefing, mcp__memtrace__fleet_status, mcp__memtrace__fleet_branch_context, mcp__memtrace__fleet_preflight, mcp__memtrace__fleet_publish_intent, mcp__memtrace__fleet_record_episode, mcp__memtrace__fleet_get_node_state, mcp__memtrace__fleet_query_episodes, mcp__memtrace__fleet_acquire_lease, mcp__memtrace__fleet_release_lease, mcp__memtrace__fleet_renew_lease, mcp__memtrace__fleet_get_episode, mcp__memtrace__fleet_list_escalations, mcp__memtrace__fleet_get_escalation, mcp__memtrace__fleet_submit_verdict, mcp__memtrace__fleet_resolve_escalation, mcp__memtrace__fleet_ydoc_append, mcp__memtrace__fleet_ydoc_read, mcp__memtrace__fleet_audit, mcp__memtrace__recall_decision, mcp__memtrace__governing_rules, mcp__memtrace__why_is_this_here, mcp__memtrace__governing_contracts, mcp__memtrace__verify_intent, mcp__memtrace__get_arc, mcp__memtrace__search_docs, mcp__memtrace__ask_docs, mcp__memtrace__read_doc
 ---
 
 # Engineering Workflow Directive: Bug Remediation & Diagnostics
@@ -145,10 +145,22 @@ Skills are `/memtrace-skills:<name>` (`memtrace-first` routes discovery,
 tools** named `mcp__memtrace__<tool>` — call them directly, never as skills.
 
 **Cortex decision memory is proxied through the `memtrace` MCP server** (`recall_decision`,
-`why_is_this_here`, `governing_contracts`, `verify_intent`, `get_arc`). Do **not** connect to
-`memcortex-mcp` independently or pass it a store path. If the sidecar is absent those five schemas
-return an explicit *unavailable* while the other tools keep working — degrade gracefully, never
-silently.
+`governing_rules`, `why_is_this_here`, `governing_contracts`, `verify_intent`, `get_arc`). Do **not**
+connect to `memcortex-mcp` independently or pass it a store path. If the sidecar is absent those six
+schemas return an explicit *unavailable* while the other tools keep working — degrade gracefully,
+never silently. **An `unavailable` is not a `CannotProve`:** it means the check never ran, so it is
+never evidence that behavior was undecided.
+
+⚠️ **Exact signatures — copy them, do not infer them.** Verified against the hosted docs
+(`mcp/tools#cortex-sidecar`, `features/cortex`) on 2026-09-12:
+`recall_decision({query})` (the param is **`query`**, never `question`) ·
+`governing_rules({repo_id, file_path})` · `verify_intent({decision_id})` · `get_arc({decision_id})` ·
+`why_is_this_here({symbol_id})` · `governing_contracts({symbol_id})`.
+A `decision_id` comes from `recall_decision`'s own results and nowhere else — the docs name passing
+a symbol name where a `decision_id` belongs as "a common misuse". And **no tool returns a Cortex
+`symbol_id`** (`find_symbol` / `find_code` / `get_symbol_context` return `file_path` plus line
+spans), so the `symbol_id` pair is effectively uncallable here and
+**`governing_rules({repo_id, file_path})` is the reachable "what governs this code?" call**.
 
 **Prose/config files remain grep/Read territory** — `CONTEXT.md`, `CONTRIBUTING.md`, `docs/adr/*`,
 `package.json`, READMEs, raw JSON/YAML/TOML, `.changeset/*`. Memtrace is for code.
@@ -185,9 +197,11 @@ Confirmed against Memtrace docs `mcp/tools` (2026-08-08). Every tool below is in
 | | One symbol's full history + AST hash | `get_timeline` |
 | | What one commit actually touched | `get_episode_replay` (`mode: graph_summary`) |
 | | History window missing | `replay_history` |
-| **Was it deliberate** | Recorded decision / ban / convention | `recall_decision` |
-| | Lineage + contracts for the symbol | `why_is_this_here`, `governing_contracts`, `get_arc` |
-| | Did the decision hold | `verify_intent` (`Held` / `ViolatedAt` / `CannotProve`) |
+| **Was it deliberate** | Recorded decision / ban / convention | `recall_decision({query})` — **`query`**, not `question` |
+| | What governs the FILE you are about to edit | `governing_rules({repo_id, file_path})` — start here; needs no symbol id |
+| | Did the decision hold | `verify_intent({decision_id})` (`Held` / `ViolatedAt` / `CannotProve`) — id from `recall_decision` |
+| | Episodes that implemented the decision | `get_arc({decision_id})` — id from `recall_decision`, NOT a symbol name |
+| | Lineage / contracts for a symbol | `why_is_this_here({symbol_id})`, `governing_contracts({symbol_id})` — no tool returns a `symbol_id`; prefer `governing_rules` |
 | **Before you edit** | Blast radius + risk rating | `get_impact` (`upstream\|downstream\|both`) |
 | | One-call bundle (impact + churn + co-change + checklist) | `preflight_check` |
 | | Behavioral coupling the call graph misses | `get_cochange_context` |
@@ -373,6 +387,14 @@ formatting run locally; **tests do not.**
       stale within minutes. *(Real incident: a `/bug-fixer` run spent a full build-and-review cycle
       on #3206 while another agent was concurrently updating and merging PR #3435, which fixed it.
       Neither surface was registered with the fleet, so neither could see the other.)*
+      **A re-check that finds the issue CLOSED must be written back immediately** — set that
+      entry's `queue.json` state to `closed` with the tracker's own `stateReason` and `closedAt`
+      in `reason`, then move on. Re-checking and not recording is why the sweep cannot terminate:
+      the entry stays `queued`, the run-incomplete Stop hook keeps naming it as the next required
+      step, and the count of "outstanding" issues never reaches zero. *(Real incident: 11 of 36
+      entries reported outstanding on 2026-08-26 were for issues already closed on the tracker —
+      9 COMPLETED, 2 DUPLICATE — one of them, #3685, armed for ~40 hours against an issue that
+      closed 7 hours after that run started.)*
    b. **An open PR already references it** (`closes/fixes/resolves #<n>`), or a hotfix branch for
       it already has an open PR.
    c. **A peer agent is on it** — a live intent or recent episode from item 1 above names this
@@ -391,6 +413,15 @@ formatting run locally; **tests do not.**
    "if_answer_a": "<what you would do>", "if_answer_b": "<what you would do>" }` (add more
    `if_answer_*` keys as the decision has more than two branches). A `needs-decision` entry with a
    null or freeform `decision` is not a record, it is a shrug.
+
+   **Resuming an existing queue: reconcile BEFORE continuing.** If `.gsd/bug/queue.json` already
+   exists when this command starts, every entry still reading `queued` or `in_progress` is a
+   snapshot of tracker state from whenever the queue was built, which may be days stale. Re-check
+   each one with `gh issue view <n> --json state,stateReason,closedAt` and move any that is
+   CLOSED to `closed`, recording the tracker's reason and timestamp. Only then continue the
+   sweep. A queue is a work list, not a historical record — an entry whose issue closed outside
+   this sweep is done, however it got done, and leaving it `queued` manufactures phantom work
+   that no amount of sweeping can retire.
 6. **One concern per PR.** Each queued issue is remediated on its **own** branch and ships its
    **own** PR (`RULESET.PR-SCOPE.one-concern-per-PR`); never batch multiple issues into one PR.
 7. **Loop.** Execute Steps 0–6 in full for **each** issue: a fresh `gsd-test` verification and both
@@ -447,6 +478,22 @@ fork PR from a contributor who never calls Fleet. See `CONTRIBUTING.md` →
 "Adding a section to `docs/FEATURES.md`" for the human-facing rule, and prefer proposing the
 fragment-plus-renderer pattern (`.changeset/`, `tests/emitted-drift-acks/` #2914) over leasing the
 same counter forever.
+
+**A SUBAGENT must not take `agent_id` from `fleet_status` — derive a distinct one.** `fleet_status`
+resolves identity per **daemon session**, not per agent, so every in-process subagent of one session
+inherits the orchestrator's id. Fleet then cannot tell them apart and `active_conflicts` comes back
+empty **by construction** — the most dangerous answer available, because it reads as a clean check.
+`fleet_publish_intent`, `fleet_record_episode` and `fleet_acquire_lease` all accept `agent_id` as a
+free parameter: pass a literal derived from the work, `agent-<issue#>`. Only the orchestrator uses
+the `fleet_status` value. Verified 2026-08-25 — three concurrent subagents all reported
+`agent-41805` with `live_intents: 0` while two of them edited the same file.
+
+**The session's worktree binding is a MUTEX.** Subagents inherit it. Moving the orchestrator into a
+second worktree while an agent works in a first **silently breaks that agent's Bash** — every
+command is refused ("session is isolated in the worktree X … resolved to Y") and `EnterWorktree`
+then refuses to re-bind because cwd and binding disagree. Read and Edit keep working, which makes it
+look survivable; it is not, since the agent can no longer run builds, lint, or any sync step. In a
+sweep that fans out across worktrees, hand the binding to one agent at a time.
 </step>
 
 <step name="0_context_init">
@@ -542,8 +589,10 @@ same counter forever.
      touched; `get_cochange_context` for behaviorally-coupled symbols the static call graph cannot
      show.
 6. **Establish WHY the code is the way it is — do not "fix" an intentional constraint.** Query
-   Cortex before concluding root cause: `recall_decision` (free-text), `why_is_this_here(symbol_id)`,
-   `governing_contracts(symbol_id)`, and `verify_intent(decision_id)` to determine whether the bug
+   Cortex before concluding root cause: `recall_decision({query})` (free-text — the param is
+   `query`, not `question`), then `governing_rules({repo_id, file_path})` for the file you are about
+   to touch, and `verify_intent({decision_id})` on an id `recall_decision` actually returned, to
+   determine whether the bug
    is itself a **violation of a recorded decision** (`Held` / `ViolatedAt` / `CannotProve`). Treat
    `CannotProve` as *no recorded rationale* — never as license to invent one, never as proof of
    absence. **If the "bug" is a recorded, LOCKED design decision, set it to `needs-decision` and
@@ -829,6 +878,24 @@ same counter forever.
      `npm run lint:ci` ran and every finding is fixed. Emitting it without having run the gates is
      falsification; running them and then refusing to emit it is a failure of this command.
 9. **Backfill the changeset PR number** (from `pr:0`) now that the real number exists.
+
+   ⚠️ **That commit needs a pass marker, and getting one is FREE — do not burn a matrix run.**
+   The push gate only *reads* markers, and it will refuse the backfill because the branch as a whole
+   ships code: it compares against `origin/next`, not your upstream, deliberately, so the question
+   it answers is "does this push executable code onto a shared branch". The thing that *mints* a
+   marker is `gsd-verify-and-record.cjs`, which carries a pass forward **without running anything**
+   when the delta from a verified ancestor is doc-only:
+
+   ```
+   nohup node <abs>/.claude/hooks/gsd-verify-and-record.cjs --head <literal-40-hex> --base next --bench <b> > <log> 2>&1 &
+   → NOT running gsd-test — every file changed since <ancestor> (which has a recorded pass) is doc-only:
+       .changeset/<fragment>.md
+     Carried that pass forward. (pre-pr-gate.sh exempts this push too.)
+   ```
+
+   Seconds, not minutes. Reading the gate's refusal as "re-run the suite" costs a full matrix run
+   per PR for a one-line edit. It does NOT apply after a rebase that pulled in upstream commits —
+   that delta carries code and earns a real run.
 </step>
 
 <step name="6_ci_watch_and_merge">

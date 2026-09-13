@@ -98,7 +98,7 @@ try {
 if (process.env.GSD_ALLOW_EMITTED_READ === '1') {
   try {
     fs.appendFileSync(
-      '/Users/trekkie/projects/gsd-core/.gsd/override.log',
+      path.join(__dirname, '..', '..', '.gsd', 'override.log'),
       `${new Date().toISOString()}  EMITTED_CJS_READ_OVERRIDE: ${toolName} ${absPath}\n`,
     );
   } catch { /* logging is best-effort; never block on it */ }

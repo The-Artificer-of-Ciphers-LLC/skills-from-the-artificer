@@ -194,7 +194,6 @@ try { prunePasses(passesDir, process.cwd()); } catch { /* pruning must never bre
 function docOnlyRegex() {
   for (const p of [
     path.join(__dirname, 'pre-pr-gate.sh'),
-    '/Users/trekkie/projects/gsd-core/.claude/hooks/pre-pr-gate.sh',
   ]) {
     try {
       const m = fs.readFileSync(p, 'utf8').match(/^DOC_ONLY_RE='(.+)'$/m);
