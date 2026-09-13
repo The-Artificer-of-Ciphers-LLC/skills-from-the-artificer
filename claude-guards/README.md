@@ -24,25 +24,42 @@ file move.
 
 ### Current split
 
-Registered at **user** scope (cross-project policy):
+These are **global policy**, not one project's workflow — so they are registered at
+**user** scope (`~/.claude/settings.json`) and carry no `gsd-` prefix:
 
-    gsd-memtrace-first-guard.cjs          Read|Grep|Glob|Bash
-    gsd-no-defer-guard.js                 Bash|mcp__ccd_session__spawn_task
-    gsd-tier-guard.cjs                    Write|Edit|MultiEdit
-    gsd-block-timeout-increase-guard.cjs  Write|Edit|MultiEdit
+    memtrace-first-guard.cjs              Read|Grep|Glob|Bash
+    no-defer-guard.js                     Bash|mcp__ccd_session__spawn_task
+    tier-guard.cjs                        Write|Edit|MultiEdit
+    block-timeout-increase-guard.cjs      Write|Edit|MultiEdit
+    measure-dont-infer-guard.cjs          Bash
+    block-ci-rerun-guard.cjs              Bash
+    worktree-guard.cjs                    Write|Edit|MultiEdit
+    agent-dispatch-guard.cjs              Agent
+    run-incomplete-guard.cjs              Stop
+    subagent-output-cap.cjs               SubagentStop
     zsh-guard.cjs                         Bash
+    session-model.cjs                     SessionStart
+
+One hook keeps the prefix because it genuinely *is* gsd-core-specific — it hardcodes
+that repo's `CLAUDE.md` path and no-ops everywhere else:
+
     gsd-claudemd-symlink.sh               SessionStart
-    gsd-session-model.cjs                 SessionStart
 
-Registered at **gsd-core project** scope (`~/projects/gsd-core/.claude/settings.json`)
-because they encode that repo's workflow and were previously firing everywhere:
+`run-incomplete-guard.cjs` reads `.gsd/` lane artifacts, but the lanes it guards
+(`bug-fixer`, `feature-builder`, `triage`) are global skills usable in any repo, and it
+fails open where those artifacts don't exist — so it belongs at user scope too.
 
-    gsd-measure-dont-infer-guard.cjs      Bash
-    gsd-block-ci-rerun-guard.cjs          Bash
-    gsd-worktree-guard.cjs                Write|Edit|MultiEdit
-    gsd-agent-dispatch-guard.cjs          Agent
-    gsd-run-incomplete-guard.cjs          Stop
-    gsd-subagent-output-cap.cjs           SubagentStop
+The `gsd-` prefix is also the GSD product's own namespace in `~/.claude/hooks/`
+(`gsd-statusline.js`, `gsd-workflow-guard.js`, …, installed by GSD itself). Personal
+guards squatting that prefix risked being overwritten by a GSD update.
+
+### Names that stayed
+
+Escape-hatch env vars (`GSD_WORKTREE_GUARD_OFF`, `GSD_MEASURE_GUARD_OFF`,
+`GSD_MEMTRACE_GUARD_OFF`, the `GSD_TIER_GUARD*` family) and on-disk state paths
+(`~/.claude/state/gsd-tier/`, `.gsd/main-checkout-ok`) were **not** renamed. Those are
+live contracts — an exported bypass in your shell rc or a committed marker in another
+repo would silently stop working.
 
 ## Tests
 
@@ -51,9 +68,9 @@ stops denying is worse than no hook:
 
 ```bash
 cd ~/.claude/hooks
-./gsd-memtrace-first-guard.test.sh      # 191 cases
-./gsd-tier-guard.test.sh                #  49 cases
-./gsd-measure-dont-infer-guard.test.sh  #  66 cases
+./memtrace-first-guard.test.sh      # 199 cases
+./tier-guard.test.sh                #  49 cases
+./measure-dont-infer-guard.test.sh  #  66 cases
 ```
 
 ## Restoring

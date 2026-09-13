@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // gsd-hook-version: 1.1.0
-// gsd-worktree-guard.cjs — PreToolUse guard on Write|Edit|MultiEdit.
+// worktree-guard.cjs — PreToolUse guard on Write|Edit|MultiEdit.
 //
 // Rule: never do agentic coding in the MAIN checkout — always in a linked
 // git worktree. Detection: `git rev-parse --git-dir --git-common-dir` run in

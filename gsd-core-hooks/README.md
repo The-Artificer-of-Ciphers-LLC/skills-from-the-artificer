@@ -2,7 +2,7 @@
 
 > A rule an agent can read once and forget is not enforced.
 
-The `.claude/hooks/` suite from one real project, copied as-is. Fifteen scripts, each written to
+The `.claude/hooks/` suite from one real project, copied as-is. Fourteen scripts, each written to
 close one specific incident (named, dated, in its own header comment) rather than designed
 speculatively. Full rationale: [`SKILL.md`](SKILL.md).
 
@@ -27,11 +27,10 @@ gsd-core-hooks/
     ├── gsd-foreground-poll-guard.sh   PreToolUse(Bash)      — denies a foreground `while`/`until` poll loop with a long sleep (dies at the harness ceiling, indistinguishable from the watched job failing)
     ├── gsd-pgrep-waiter-guard.sh      PreToolUse(Bash\|Monitor) — denies a `pgrep -f "<cmd>"` wait-loop whose own argv matches its search pattern (never terminates)
     ├── block-local-node-test.sh       PreToolUse(Bash)      — hard-denies local `node --test` / `npm test` (orphans the workstation; route through the remote runner)
-    ├── memtrace-first-guard.cjs       PreToolUse(Bash\|Grep\|Glob) — denies a text-search code lookup unless a Memtrace MCP tool call preceded it in this turn
-    ├── memtrace-first-guard.test.sh   regression suite for the above — run after any edit to the guard
     ├── require-memtrace-evidence.sh   PreToolUse(Bash)      — blocks `gh pr review --approve/--request-changes` unless the review body documents which Memtrace tools were actually called
     ├── gsd-phase-gate.cjs             PreToolUse(Edit\|Write\|Bash) — the project-specific artifact gate this repo's `artifact-gates/` engine was generalized from (see the note below)
     ├── emitted-cjs-read-guard.cjs     PreToolUse(Read\|Edit\|Write\|NotebookEdit) — denies reading/editing tsc-emitted `.cjs` output instead of its authored `.cts` source
+    ├── worktree-fresh-base-guard.sh   PreToolUse(Bash\|EnterWorktree) — denies creating/entering a worktree branched off a stale base
     └── lib/prune-gsd-passes.cjs       library used by the pass-marker gate to garbage-collect stale per-sha markers (bounded growth — 906 markers observed after ~37 days unpruned)
 ```
 
@@ -65,17 +64,12 @@ to what applies to yours:
           { "type": "command", "command": "~/.claude/hooks/gsd-pgrep-waiter-guard.sh", "timeout": 10 },
           { "type": "command", "command": "~/.claude/hooks/gsd-foreground-poll-guard.sh", "timeout": 10 },
           { "type": "command", "command": "~/.claude/hooks/block-local-node-test.sh", "timeout": 10 },
-          { "type": "command", "command": "node ~/.claude/hooks/memtrace-first-guard.cjs" },
           { "type": "command", "command": "node ~/.claude/hooks/gsd-phase-gate.cjs" }
         ]
       },
       {
         "matcher": "Monitor",
         "hooks": [{ "type": "command", "command": "~/.claude/hooks/gsd-pgrep-waiter-guard.sh", "timeout": 10 }]
-      },
-      {
-        "matcher": "Grep|Glob",
-        "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/memtrace-first-guard.cjs" }]
       },
       {
         "matcher": "Edit|Write|NotebookEdit",
@@ -112,10 +106,13 @@ Every hook here assumes pieces of gsd-core's specific toolchain. At minimum:
   `{"type":"verdict","outcome":"passed"}` line, and a per-sha pass-marker file. Substitute your own
   runner and its own "this pass belongs to this sha" binding — that binding is the part that
   matters, not the specific tool.
-- **Memtrace.** `memtrace-first-guard.cjs`, `memtrace-first-guard.test.sh`, and
-  `require-memtrace-evidence.sh` assume the Memtrace MCP server is installed and indexing your repo.
-  Without it, either point these at your own code-discovery tool or drop them — a guard that demands
-  a tool you don't have just denies everything.
+- **Memtrace.** `require-memtrace-evidence.sh` assumes the Memtrace MCP server is installed and
+  indexing your repo. Without it, either point it at your own code-discovery tool or drop it — a
+  guard that demands a tool you don't have just denies everything.
+  The Memtrace-first *code-discovery* guard that used to live here was **removed**: it is not
+  specific to this project, and a second, more complete implementation of the same rule already
+  ships as global policy in [`../claude-guards/`](../claude-guards/) (`memtrace-first-guard.cjs`,
+  191-case suite). Two copies of one rule under one name is a trap, not redundancy.
 - **The build pipeline.** `emitted-cjs-read-guard.cjs` is specific to one repo's `.cts` → `.cjs` tsc
   output convention (ADR-457 in the source project). Drop it unless you have an analogous
   generated-file trap.

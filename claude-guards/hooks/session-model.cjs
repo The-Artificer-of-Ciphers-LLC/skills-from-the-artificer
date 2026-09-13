@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // gsd-hook-version: 1.0.0
-// gsd-session-model.cjs — SessionStart hook.
+// session-model.cjs — SessionStart hook.
 //
 // Records the main session's model/tier to disk so a later PreToolUse hook
-// (gsd-tier-guard.cjs) can know, cheaply and without re-deriving it, whether
+// (tier-guard.cjs) can know, cheaply and without re-deriving it, whether
 // the CURRENT session is running under opus. SessionStart payloads may carry
 // a `model` field but it is not guaranteed present across runtimes/versions,
 // so we fall back through env before landing on 'unknown'. Standalone by
@@ -13,7 +13,7 @@
 // Fail-open contract: this hook must NEVER throw or block session start. Any
 // unexpected error anywhere in the body results in a silent exit(0) — a
 // broken recorder hook must not wedge the session, and losing the tier
-// record just means gsd-tier-guard falls back to env-based classification.
+// record just means tier-guard falls back to env-based classification.
 
 'use strict';
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Behavioral regression suite for gsd-memtrace-first-guard.cjs.
+# Behavioral regression suite for memtrace-first-guard.cjs.
 # Run after ANY edit to this hook:
-#   bash ~/.claude/hooks/gsd-memtrace-first-guard.test.sh
+#   bash ~/.claude/hooks/memtrace-first-guard.test.sh
 #
 # Covers the three real false-positive classes fixed 2026-08-26:
 #   FP1 - non-indexed paths (throwaway mktemp fixtures)
@@ -11,7 +11,7 @@
 # target is an indexed source file inside the real repo) is not gutted.
 set -uo pipefail
 cd "$(dirname "$0")" || exit 1
-GUARD="$(pwd)/gsd-memtrace-first-guard.cjs"
+GUARD="$(pwd)/memtrace-first-guard.cjs"
 
 REAL_REPO=/Users/trekkie/projects/gsd-core
 
@@ -270,6 +270,39 @@ check "GUARD-RAIL: git log -- <source> stays allowed" "$ALLOW_CHECK"
 run "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git diff HEAD~1 -- src/cli-exit.cts\"},\"cwd\":\"$REAL_REPO\"}"
 check "GUARD-RAIL: git diff -- <source> stays allowed" "$ALLOW_CHECK"
 
+echo "=== 1.5.1 OUTPUT REDIRECTS (P4 follow-up): a '>' target is a WRITE, not a read ==="
+# Reported bug (measured 2026-09-12): splitInputRedirects() only ever
+# stripped INPUT ('<') redirects. For a read-binary clause like `cat > x`,
+# the '>' and its target stayed in the kept token stream and clauseOperands()
+# collected the write target as if it were a file being read.
+
+run "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat > src/new-file.cjs\"},\"cwd\":\"$REAL_REPO\"}"
+check "OUTREDIR: 'cat > <indexed-new-file>' (pure write) -> allow" "$ALLOW_CHECK"
+
+run "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat >> src/new-file.cjs\"},\"cwd\":\"$REAL_REPO\"}"
+check "OUTREDIR: 'cat >> <indexed-new-file>' (append) -> allow" "$ALLOW_CHECK"
+
+run "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat > src/new-file.cjs <<'EOF'\nsome content\nEOF\"},\"cwd\":\"$REAL_REPO\"}"
+check "OUTREDIR: 'cat > <indexed-new-file>' with a heredoc body -> allow" "$ALLOW_CHECK"
+
+run "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"node gen.cjs > src/out.cjs\"},\"cwd\":\"$REAL_REPO\"}"
+check "OUTREDIR: 'node gen.cjs > <indexed-out>' stays allowed (not a read binary)" "$ALLOW_CHECK"
+
+run "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo hi > src/out.cjs\"},\"cwd\":\"$REAL_REPO\"}"
+check "OUTREDIR: 'echo hi > <indexed-out>' -> allow" "$ALLOW_CHECK"
+
+run "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat src/cli-exit.cts > src/out.cjs\"},\"cwd\":\"$REAL_REPO\"}"
+check "OUTREDIR: 'cat <indexed-read> > <indexed-write>' still denies on the real read" "$DENY_CHECK"
+
+run "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat < src/cli-exit.cts\"},\"cwd\":\"$REAL_REPO\"}"
+check "OUTREDIR guard-rail: input redirect '<' is still a read -> deny" "$DENY_CHECK"
+
+# Pinning behavior, not inventing it: a stderr redirect on a genuine read
+# clause was DENY before this fix (the real read of cli-exit.cts drives the
+# verdict regardless of the redirect) and must stay DENY after it.
+run "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"grep -c foo src/cli-exit.cts 2>/dev/null\"},\"cwd\":\"$REAL_REPO\"}"
+check "OUTREDIR: stderr redirect '2>/dev/null' on a real read -> deny (pinned, unchanged)" "$DENY_CHECK"
+
 echo "=== 1.5.0 MUST DENY: punctuation/quoting defeats of extension matching ==="
 
 # Trailing shell punctuation made extOf() return '' -> whole check skipped.
@@ -522,5 +555,5 @@ runtool '{"pattern":"someSymbol","path":"Sources","output_mode":"files_with_matc
 check "KNOWN GAP (swift): Grep output_mode=files_with_matches over a source dir is ALLOWED" "$ALLOW_CHECK"
 
 echo
-echo "gsd-memtrace-first-guard suite: $((N-F))/$N passed"
+echo "memtrace-first-guard suite: $((N-F))/$N passed"
 [ $F -eq 0 ] && exit 0 || exit 1

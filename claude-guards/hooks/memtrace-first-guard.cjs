@@ -58,7 +58,7 @@
 //   NOT AN ACCESS BOUNDARY: everything this guard blocks is obtainable via
 //     mcp__memtrace__get_source_window, which the deny text itself prescribes.
 //     It is a routing preference with an audit trail.
-// gsd-memtrace-first-guard.cjs — PreToolUse guard on Read|Grep|Glob|Bash.
+// memtrace-first-guard.cjs — PreToolUse guard on Read|Grep|Glob|Bash.
 //
 // Rule (CODE-DISCOVERY ROUTING, ~/.claude/CLAUDE.md): code-symbol lookups go
 // through Memtrace (mcp__memtrace__find_symbol / find_code), not grep/rg/sed
@@ -727,9 +727,20 @@ function findClauseOperands(tokens) {
 // glued to the token made baseNameOf() return the FILENAME as the binary.
 // Splitting `<` and its target out of the token stream restores both.
 //
-// OUTPUT redirects (`>`, `>>`, `2>&1`) are deliberately NOT handled: this is
-// a READ guard, and `node gen.cjs > out.swift` is a write. Treating a `>`
-// target as a read operand would be a pure false positive.
+// OUTPUT redirects (`>`, `>>`, `2>&1`) are stripped out of the token stream
+// entirely (and never contribute a read operand): this is a READ guard, and
+// `cat > out.cjs` / `node gen.cjs > out.swift` are writes. Left un-stripped,
+// a read-binary clause like `cat > out.cjs` would have its `>` target
+// collected by clauseOperands() as if it were a file being read — a pure
+// false positive (measured 2026-09-12, `cat > .tmp-redirect-probe.cjs`
+// wrongly DENIED). We handle: standalone operator + target (`>` `x`, `>>` `x`,
+// `>|` `x`, `1>` `x`, `2>` `x`, `&>` `x`, `>&` `x`), glued operator+target
+// (`>x`, `>>x`, `2>x`, `&>x`, `1>x`), and bare fd duplication with no file at
+// all (`2>&1`, `>&2`), which is simply dropped.
+const OUTPUT_REDIR_OP_RE = /^(?:[0-9]*>>?\|?|&>>?|>&)$/;
+const OUTPUT_REDIR_GLUED_RE = /^([0-9]*(?:>>?\|?|&>>?))(.+)$/;
+const OUTPUT_REDIR_FDDUP_RE = /^[0-9]*>&[0-9]+$/;
+
 function splitInputRedirects(tokens) {
   const kept = [];
   const redirIn = [];
@@ -747,6 +758,19 @@ function splitInputRedirects(tokens) {
       redirIn.push(m[2]);
       continue;
     }
+    // fd duplication with no filename target at all (`2>&1`, `>&2`): drop
+    // the token outright, nothing follows it to consume.
+    if (OUTPUT_REDIR_FDDUP_RE.test(t)) continue;
+    // standalone output-redirect operator (`>`, `>>`, `1>`, `2>`, `&>`, `>&`,
+    // `>|`) followed by its target token: drop both.
+    if (OUTPUT_REDIR_OP_RE.test(t)) {
+      if (tokens[i + 1]) i += 1;
+      continue;
+    }
+    // glued operator+target (`>x`, `>>x`, `2>x`, `&>x`, `1>x`): drop the
+    // whole token, since the "operand" is only the redirect target.
+    const gm = t.match(OUTPUT_REDIR_GLUED_RE);
+    if (gm && gm[2]) continue;
     kept.push(t);
   }
   return { kept, redirIn };

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gsd-no-defer-guard.js — PreToolUse DENY guard enforcing the no-defer rule.
+// no-defer-guard.js — PreToolUse DENY guard enforcing the no-defer rule.
 //
 // Claude reflexively reaches for two tools to DEFER a defect it found instead of
 // fixing it inline. This guard makes that physically impossible:

@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # Behavioral regression suite for the tier-guard hook family:
-#   gsd-session-model.cjs, gsd-tier-guard.cjs, gsd-agent-dispatch-guard.cjs,
-#   gsd-subagent-output-cap.cjs
+#   session-model.cjs, tier-guard.cjs, agent-dispatch-guard.cjs,
+#   subagent-output-cap.cjs
 # Run after ANY edit to these hooks:
-#   bash ~/.claude/hooks/gsd-tier-guard.test.sh
+#   bash ~/.claude/hooks/tier-guard.test.sh
 # HOME is isolated per invocation via mktemp -d and destroyed on exit via
 # trap. This suite NEVER touches the real ~/.claude/state — every hook under
 # test derives its state dir from os.homedir(), which honors $HOME.
 set -uo pipefail
 cd "$(dirname "$0")" || exit 1
 
-SESSION_MODEL=./gsd-session-model.cjs
-TIER_GUARD=./gsd-tier-guard.cjs
-DISPATCH_GUARD=./gsd-agent-dispatch-guard.cjs
-OUTPUT_CAP=./gsd-subagent-output-cap.cjs
+SESSION_MODEL=./session-model.cjs
+TIER_GUARD=./tier-guard.cjs
+DISPATCH_GUARD=./agent-dispatch-guard.cjs
+OUTPUT_CAP=./subagent-output-cap.cjs
 
 D=$(mktemp -d); trap 'rm -rf "$D"' EXIT
 STATE_DIR="$D/.claude/state/gsd-tier"
@@ -76,7 +76,7 @@ seed_tier() {
   printf '{"sessionId":"%s","model":"x","tier":"%s","recordedAt":"2026-01-01T00:00:00.000Z"}' "$sid" "$tier" > "$STATE_DIR/$sid.json"
 }
 
-echo "=== gsd-session-model.cjs ==="
+echo "=== session-model.cjs ==="
 
 run "$SESSION_MODEL" '{"session_id":"sess-model-opus","model":"claude-opus-5"}'
 assert_rc "session-model: opus string -> rc0" 0
@@ -109,7 +109,7 @@ else
   fail "session-model: invalid session_id -> writes nothing, rc0" "rc=$RC before=$BEFORE_COUNT after=$AFTER_COUNT"
 fi
 
-echo "=== gsd-tier-guard.cjs ==="
+echo "=== tier-guard.cjs ==="
 
 seed_tier sess-tg-opus opus
 PAYLOAD_DENY='{"session_id":"sess-tg-opus","tool_name":"Write","tool_input":{"file_path":"src/foo.ts","content":"whatever"}}'
@@ -179,7 +179,7 @@ run "$TIER_GUARD" '{"session_id":"sess-tg-ratchet","tool_name":"Edit","tool_inpu
   "GSD_TIER_GUARD_FREE_EDITS=2"
 check "tier-guard: ratchet edit 3 (budget exhausted) -> deny" "$DENY_CHECK"
 
-echo "=== gsd-agent-dispatch-guard.cjs ==="
+echo "=== agent-dispatch-guard.cjs ==="
 
 run "$DISPATCH_GUARD" '{"tool_name":"Agent","tool_input":{"subagent_type":"general-purpose","description":"do stuff","prompt":"do the thing"}}'
 check "dispatch-guard: general-purpose, no model -> deny" "$DENY_CHECK"
@@ -213,7 +213,7 @@ check "dispatch-guard: prompt already has sentinel -> empty stdout" "$EMPTY_CHEC
 run "$DISPATCH_GUARD" '{"tool_name":"Bash","tool_input":{"command":"ls"}}'
 check "dispatch-guard: tool_name Bash -> empty stdout" "$EMPTY_CHECK"
 
-echo "=== gsd-subagent-output-cap.cjs ==="
+echo "=== subagent-output-cap.cjs ==="
 
 MSG20000=$(mkstr 20000)
 run "$OUTPUT_CAP" "{\"agent_id\":\"agent-cap-block\",\"last_assistant_message\":\"$MSG20000\"}"
@@ -250,5 +250,5 @@ for script in "$SESSION_MODEL" "$TIER_GUARD" "$DISPATCH_GUARD" "$OUTPUT_CAP"; do
 done
 
 echo
-echo "gsd-tier-guard suite: $((N-F))/$N passed"
+echo "tier-guard suite: $((N-F))/$N passed"
 [ $F -eq 0 ] && exit 0 || exit 1

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Behavioral regression suite for gsd-measure-dont-infer-guard.cjs.
+# Behavioral regression suite for measure-dont-infer-guard.cjs.
 # Run after ANY edit to the guard:
-#   bash ~/.claude/hooks/gsd-measure-dont-infer-guard.test.sh
+#   bash ~/.claude/hooks/measure-dont-infer-guard.test.sh
 set -uo pipefail
 cd "$(dirname "$0")" || exit 1
 
-GUARD=./gsd-measure-dont-infer-guard.cjs
+GUARD=./measure-dont-infer-guard.cjs
 STATE_FILE="$HOME/.claude/state/gsd-measure-guard-denials.jsonl"
 
 N=0
@@ -304,5 +304,5 @@ run '   '
 assert_rc "whitespace-only stdin -> allow" 0
 
 echo
-echo "gsd-measure-dont-infer-guard suite: $((N-F))/$N passed"
+echo "measure-dont-infer-guard suite: $((N-F))/$N passed"
 [ $F -eq 0 ] && exit 0 || exit 1
