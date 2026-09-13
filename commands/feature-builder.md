@@ -1,7 +1,7 @@
 ---
 description: Engineering Workflow Directive — Feature Implementation & Integrations. Implements a feature-request epic or single feature issue, Memtrace-first. Graph-backed research, recorded-decision + known-defect gauntlets, epic detection with seam-validated multi-PR decomposition (stacked or Fleet-parallel), then a per-deliverable loop of design → TDD via gsd-test → mutation gate → two orthogonal review engines → Diátaxis docs → rebase + PR, and a dependency-ordered epic roll-up.
 argument-hint: "[--issue N] [--repo owner/repo] [--base next] [--epic auto|on|off] [--autonomous] [--max-parallel-prs N] [--phase N] [--plan-only]"
-allowed-tools: Bash, Read, Write, Edit, Grep, Glob, Agent, Skill, AskUserQuestion, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskList, TaskGet, WebSearch, WebFetch, mcp__context7__resolve-library-id, mcp__context7__query-docs, mcp__memtrace__index_directory, mcp__memtrace__list_indexed_repositories, mcp__memtrace__check_job_status, mcp__memtrace__list_jobs, mcp__memtrace__get_repository_stats, mcp__memtrace__watch_directory, mcp__memtrace__list_watched_paths, mcp__memtrace__unwatch_directory, mcp__memtrace__list_worktrees, mcp__memtrace__cleanup_worktrees, mcp__memtrace__cleanup_stale_records, mcp__memtrace__cleanup_episodes, mcp__memtrace__embed_diag, mcp__memtrace__mem_diag, mcp__memtrace__embed_reset_breaker, mcp__memtrace__find_code, mcp__memtrace__find_symbol, mcp__memtrace__get_source_window, mcp__memtrace__get_directory_tree, mcp__memtrace__analyze_relationships, mcp__memtrace__get_symbol_context, mcp__memtrace__get_impact, mcp__memtrace__preflight_check, mcp__memtrace__find_dead_code, mcp__memtrace__find_duplicate_code, mcp__memtrace__calculate_cyclomatic_complexity, mcp__memtrace__find_most_complex_functions, mcp__memtrace__get_function_quality_metrics, mcp__memtrace__find_hotspots, mcp__memtrace__get_style_fingerprint, mcp__memtrace__review_agent_sessions, mcp__memtrace__find_ast_review_issues, mcp__memtrace__find_yaml_rule_matches, mcp__memtrace__find_cross_module_issues, mcp__memtrace__find_code_review_issues, mcp__memtrace__review_github_pr, mcp__memtrace__replay_history, mcp__memtrace__get_daily_briefing, mcp__memtrace__get_evolution, mcp__memtrace__get_timeline, mcp__memtrace__detect_changes, mcp__memtrace__get_changes_since, mcp__memtrace__get_cochange_context, mcp__memtrace__get_episode_replay, mcp__memtrace__record_external_episode, mcp__memtrace__find_api_endpoints, mcp__memtrace__find_api_calls, mcp__memtrace__get_api_topology, mcp__memtrace__link_repositories, mcp__memtrace__get_service_diagram, mcp__memtrace__list_processes, mcp__memtrace__get_process_flow, mcp__memtrace__list_communities, mcp__memtrace__find_central_symbols, mcp__memtrace__find_dependency_path, mcp__memtrace__find_bridge_symbols, mcp__memtrace__get_codebase_briefing, mcp__memtrace__fleet_status, mcp__memtrace__fleet_branch_context, mcp__memtrace__fleet_preflight, mcp__memtrace__fleet_publish_intent, mcp__memtrace__fleet_record_episode, mcp__memtrace__fleet_get_node_state, mcp__memtrace__fleet_query_episodes, mcp__memtrace__fleet_acquire_lease, mcp__memtrace__fleet_release_lease, mcp__memtrace__fleet_renew_lease, mcp__memtrace__fleet_get_episode, mcp__memtrace__fleet_list_escalations, mcp__memtrace__fleet_get_escalation, mcp__memtrace__fleet_submit_verdict, mcp__memtrace__fleet_resolve_escalation, mcp__memtrace__fleet_ydoc_append, mcp__memtrace__fleet_ydoc_read, mcp__memtrace__fleet_audit, mcp__memtrace__recall_decision, mcp__memtrace__why_is_this_here, mcp__memtrace__governing_contracts, mcp__memtrace__verify_intent, mcp__memtrace__get_arc, mcp__memtrace__search_docs, mcp__memtrace__ask_docs, mcp__memtrace__read_doc
+allowed-tools: Bash, Read, Write, Edit, Grep, Glob, Agent, Skill, AskUserQuestion, EnterWorktree, ExitWorktree, TaskCreate, TaskUpdate, TaskList, TaskGet, WebSearch, WebFetch, mcp__context7__resolve-library-id, mcp__context7__query-docs, mcp__memtrace__index_directory, mcp__memtrace__list_indexed_repositories, mcp__memtrace__check_job_status, mcp__memtrace__list_jobs, mcp__memtrace__get_repository_stats, mcp__memtrace__watch_directory, mcp__memtrace__list_watched_paths, mcp__memtrace__unwatch_directory, mcp__memtrace__list_worktrees, mcp__memtrace__cleanup_worktrees, mcp__memtrace__cleanup_stale_records, mcp__memtrace__cleanup_episodes, mcp__memtrace__embed_diag, mcp__memtrace__mem_diag, mcp__memtrace__embed_reset_breaker, mcp__memtrace__find_code, mcp__memtrace__find_symbol, mcp__memtrace__get_source_window, mcp__memtrace__get_directory_tree, mcp__memtrace__analyze_relationships, mcp__memtrace__get_symbol_context, mcp__memtrace__get_impact, mcp__memtrace__preflight_check, mcp__memtrace__find_dead_code, mcp__memtrace__find_duplicate_code, mcp__memtrace__calculate_cyclomatic_complexity, mcp__memtrace__find_most_complex_functions, mcp__memtrace__get_function_quality_metrics, mcp__memtrace__find_hotspots, mcp__memtrace__get_style_fingerprint, mcp__memtrace__review_agent_sessions, mcp__memtrace__find_ast_review_issues, mcp__memtrace__find_yaml_rule_matches, mcp__memtrace__find_cross_module_issues, mcp__memtrace__find_code_review_issues, mcp__memtrace__review_github_pr, mcp__memtrace__replay_history, mcp__memtrace__get_daily_briefing, mcp__memtrace__get_evolution, mcp__memtrace__get_timeline, mcp__memtrace__detect_changes, mcp__memtrace__get_changes_since, mcp__memtrace__get_cochange_context, mcp__memtrace__get_episode_replay, mcp__memtrace__record_external_episode, mcp__memtrace__find_api_endpoints, mcp__memtrace__find_api_calls, mcp__memtrace__get_api_topology, mcp__memtrace__link_repositories, mcp__memtrace__get_service_diagram, mcp__memtrace__list_processes, mcp__memtrace__get_process_flow, mcp__memtrace__list_communities, mcp__memtrace__find_central_symbols, mcp__memtrace__find_dependency_path, mcp__memtrace__find_bridge_symbols, mcp__memtrace__get_codebase_briefing, mcp__memtrace__fleet_status, mcp__memtrace__fleet_branch_context, mcp__memtrace__fleet_preflight, mcp__memtrace__fleet_publish_intent, mcp__memtrace__fleet_record_episode, mcp__memtrace__fleet_get_node_state, mcp__memtrace__fleet_query_episodes, mcp__memtrace__fleet_acquire_lease, mcp__memtrace__fleet_release_lease, mcp__memtrace__fleet_renew_lease, mcp__memtrace__fleet_get_episode, mcp__memtrace__fleet_list_escalations, mcp__memtrace__fleet_get_escalation, mcp__memtrace__fleet_submit_verdict, mcp__memtrace__fleet_resolve_escalation, mcp__memtrace__fleet_ydoc_append, mcp__memtrace__fleet_ydoc_read, mcp__memtrace__fleet_audit, mcp__memtrace__recall_decision, mcp__memtrace__governing_rules, mcp__memtrace__why_is_this_here, mcp__memtrace__governing_contracts, mcp__memtrace__verify_intent, mcp__memtrace__get_arc, mcp__memtrace__search_docs, mcp__memtrace__ask_docs, mcp__memtrace__read_doc
 ---
 
 # Engineering Workflow Directive: Feature Implementation & Integrations
@@ -165,7 +165,7 @@ exists to prevent** — a stale mental model is indistinguishable from a confide
 | Catch up since last session | `get_changes_since(since=<anchor>)` → returns a fresh `session_anchor` | — |
 | Complexity / dead code / metrics | `find_most_complex_functions`, `find_dead_code`, `get_function_quality_metrics`, `calculate_cyclomatic_complexity` | — |
 | Make new code read like this repo | `get_style_fingerprint` (+ `file_path` for a per-file delta from the norm) | imitating one file |
-| **Why is this code this way? Is there a recorded ban?** | **Cortex:** `recall_decision` (free-text), `why_is_this_here(symbol_id)`, `governing_contracts(symbol_id)`, `verify_intent(decision_id)`, `get_arc(decision_id)` | inventing rationale |
+| **Why is this code this way? Is there a recorded ban?** | **Cortex:** `recall_decision({query})` — the param is **`query`**, never `question` — then `governing_rules({repo_id, file_path})` for the file itself, and `verify_intent({decision_id})` / `get_arc({decision_id})` on an id `recall_decision` returned. `why_is_this_here({symbol_id})` / `governing_contracts({symbol_id})` need a Cortex `symbol_id` that **no tool returns**, so prefer `governing_rules` | inventing rationale; passing a symbol name where a `decision_id` belongs |
 | What does this Memtrace tool do? | `ask_docs` / `search_docs` / `read_doc` | guessing params |
 
 **Cortex is proxied through the `memtrace` MCP server** — do **not** connect to `memcortex-mcp`
@@ -205,6 +205,21 @@ nothing useful while reporting success. Never accept a zero-edge index as a basi
 **Quota is not an error.** On quota exhaustion a metered tool still returns a *normal success*
 result whose payload is a quota-error JSON object. Read the payload — do not mistake it for
 "no results" and do not let it push you to grep.
+
+**A correctly-bound shared store still has a second failure mode: `repo_id` ambiguity across
+worktrees.** This command runs from a per-issue/per-deliverable worktree, and a shared `.memdb`
+indexes every active worktree of the same repo as its own `repo_id` — identical `repo_path`,
+different `branch` (e.g. `gsd-core` on `next` alongside `gsd-core-<issue>-wt` /
+`gsd-core-pr<NNN>` entries). `list_indexed_repositories` returns a healthy, populated list either
+way, so this is invisible to every check above — it is not mis-binding, it's an unsafe inference.
+The Memtrace MCP's own tool docs: *"find_code and find_symbol infer the session repo only when
+one choice is safe. In an ambiguous multi-repo workspace, call list_indexed_repositories once and
+pass repo_id explicitly."* Once, up front: `list_indexed_repositories`, filter to entries sharing
+this repo's `repo_path`; if more than one, pin `repo_id` to the entry on the integration target
+branch (`next` for `open-gsd/gsd-core`) and pass that literal `repo_id` on every subsequent
+Memtrace call this run — including inside every dispatched agent's brief, since a fresh agent has
+no memory of this check and will otherwise re-infer (possibly landing on a different worktree's
+entry) while still producing confident-looking, populated results.
 
 **Zero results are NOT permission to grep.** Run the ladder in `<memtrace_diagnostics>` instead.
 
@@ -274,7 +289,11 @@ at the first that explains the result.
    because it is the only failure that makes all the others *look* answered.
 1. **Scope.** `list_indexed_repositories` → is the repo there, on the right `branch`, recently
    indexed? **Read `_meta.empty_state_reason`** (see `<memtrace_mandate>` — `no_workspace_marker_in_cwd_chain`
-   means wrong `.memdb`; re-indexing there makes it worse, surface it instead).
+   means wrong `.memdb`; re-indexing there makes it worse, surface it instead). **Also count how
+   many entries share this repo's `repo_path`** — one per active worktree is normal, but if you
+   did not already pin `repo_id` explicitly (per `<memtrace_mandate>`'s repo_id-ambiguity note),
+   an inferred call may have silently queried the wrong worktree's entry. Confirm the pin before
+   blaming the graph.
 2. **Substance.** `get_repository_stats(repo_id)` → node counts *by kind*. Zero `Function` nodes,
    or a language you expected missing, means the parse did not cover your paths — not that the
    code is absent.
@@ -592,9 +611,14 @@ maintainer**; do not invent criteria and do not proceed without any.
   Building into a hotspot is a real cost; name it now.
 
 ### 1.3 — Recorded-decision check (Cortex)
-Run `mcp__memtrace__recall_decision` / `mcp__memtrace__why_is_this_here` /
-`mcp__memtrace__governing_contracts` / `mcp__memtrace__get_arc` against the target symbols and
-any ADR the issue cites. Add `mcp__memtrace__verify_intent(decision_id)` → would this feature
+Run `mcp__memtrace__recall_decision({query})` — the param is `query`, never `question` — then
+`mcp__memtrace__governing_rules({repo_id, file_path})` against each file the feature touches and any
+ADR the issue cites. `mcp__memtrace__why_is_this_here` / `mcp__memtrace__governing_contracts` take a
+Cortex `symbol_id` that no tool returns, so `governing_rules` is the reachable form; use the
+`symbol_id` pair only if a real numeric id is already in hand. `mcp__memtrace__get_arc({decision_id})`
+and `mcp__memtrace__verify_intent({decision_id})` take an id `recall_decision` returned, never a
+symbol name. An `unavailable` result means the check never ran — it is not a `CannotProve`.
+Add `mcp__memtrace__verify_intent({decision_id})` → would this feature
 turn a `Held` decision into `ViolatedAt`?
 
 **If the intended approach violates a recorded ban, convention, or LOCKED design decision, HALT
@@ -1195,6 +1219,27 @@ code**. A single feature falls through this step with a one-item queue.*
    PR references the graph.
 7. **Backfill the changeset PR number** (from `pr:0`) now that the real number exists. Record the
    deliverable's outcome in its Task and **tick the epic's phase checkbox**.
+
+   ⚠️ **The backfill commit needs a marker, and it is FREE — do not burn a matrix run on it.**
+   The push gate only *reads* pass markers; it will refuse this commit because the branch as a whole
+   ships code (it compares against `origin/next`, not your upstream — deliberately, so "does this
+   push executable code onto a shared branch" is answered relative to what the branch merges into).
+   The thing that *mints* a marker is `gsd-verify-and-record.cjs`, and it carries a pass forward
+   without running anything when the delta from a **verified ancestor** is doc-only:
+
+   ```
+   nohup node <abs>/.claude/hooks/gsd-verify-and-record.cjs --head <literal-40-hex> --base next --bench <b> > <log> 2>&1 &
+   → NOT running gsd-test — every file changed since <ancestor> (which has a recorded pass) is doc-only:
+       .changeset/<fragment>.md
+     Carried that pass forward. (pre-pr-gate.sh exempts this push too.)
+   ```
+
+   It returns in seconds. Reading the gate's refusal as "I must re-run the suite" costs a full
+   matrix run per PR for a one-line edit — that misreading happened twice on 2026-08-25 before the
+   carry-forward message was actually read.
+
+   The carry-forward needs a **verified ancestor**, so it does not apply after a rebase that pulled
+   in upstream commits — that delta contains code and earns a real run.
 8. 🚦 **CONFIRM THIS PR'S CI IS GREEN BEFORE STARTING THE NEXT DELIVERABLE. Opening a PR is not
    finishing it.**
    ```bash
@@ -1360,6 +1405,32 @@ rules govern every fleet call below and every fleet call elsewhere in this direc
   repo already uses for `.changeset/` (three random words, so concurrent PRs cannot collide) and
   for `tests/emitted-drift-acks/` (#2914). Prefer proposing that over leasing the same counter
   forever.
+
+- **R9 — a SUBAGENT must not take `agent_id` from `fleet_status`. Derive a distinct one.**
+  `fleet_status` resolves identity per **daemon session**, not per agent. Every in-process subagent
+  of one Claude Code session therefore gets the *same* id as the orchestrator, so Fleet cannot tell
+  them apart and `active_conflicts` is empty **by construction** — the most dangerous possible
+  answer, because it looks like a clean check.
+
+  `fleet_publish_intent`, `fleet_record_episode` and `fleet_acquire_lease` all take `agent_id` as a
+  free parameter. Pass a literal derived from the work: `agent-<issue#>`. Only the orchestrator uses
+  the `fleet_status` value.
+
+  Verified 2026-08-25: three subagents building #3840/#3841/#3842 concurrently all reported
+  `agent_id: agent-41805` with `active_agents: 0` and `live_intents: 0` while actively editing
+  overlapping files. Two of them were changing `docs/FEATURES.md` at the same moment and neither saw
+  the other. Re-publishing as `agent-3840` / `agent-3841` surfaced the real overlap immediately.
+
+- **R10 — the session's worktree binding is a MUTEX. Do not move it while a subagent is working.**
+  Subagents inherit the orchestrator's worktree binding. `EnterWorktree` into a second worktree
+  while an agent is mid-task in a first one **silently breaks that agent's Bash** — every command is
+  refused with "session is isolated in the worktree X … resolved to Y", and `EnterWorktree` then
+  refuses to re-bind because cwd and binding disagree. Read and Edit keep working, which makes it
+  look survivable; it is not, because the agent cannot run builds, lint, or `sync:launcher`.
+
+  With N parallel worktrees, schedule the binding: hand it to one agent at a time, and do orchestrator
+  work that needs a specific worktree (push, PR, merge) only when no agent is running there. Cost
+  this batch: two agents stalled mid-task, one for hours.
 
 Invoke `/memtrace-skills:memtrace-fleet-first`. **None of these tools are billable.**
 

@@ -56,6 +56,7 @@
  */
 
 const fs = require('node:fs');
+const path = require('node:path');
 
 function readStdin() {
   try { return fs.readFileSync(0, 'utf8'); } catch { return ''; }
@@ -94,7 +95,7 @@ const rawCommand = String(input.command || '');
 if (process.env.GSD_MEMTRACE_FIRST_OVERRIDE === '1') {
   try {
     fs.appendFileSync(
-      '/Users/trekkie/projects/gsd-core/.gsd/override.log',
+      path.join(__dirname, '..', '..', '.gsd', 'override.log'),
       `${new Date().toISOString()}  MEMTRACE_FIRST_OVERRIDE: ${toolName} ${rawCommand.slice(0, 200)}\n`,
     );
   } catch { /* logging is best-effort; never block on it */ }
@@ -226,6 +227,9 @@ deny(
   '  • where does X behavior live → mcp__memtrace__find_code\n' +
   '  • callers / callees / role   → mcp__memtrace__get_symbol_context\n' +
   '  • blast radius before edit   → mcp__memtrace__get_impact  (or preflight_check)\n\n' +
+  'CAVEAT: in a git worktree, brand-new symbols live in an overlay. ONLY find_code takes a ' +
+  '`worktree` param — find_symbol / get_symbol_context / get_impact do NOT, so a miss from those ' +
+  'is not proof of absence; re-ask find_code({repo_id, query, worktree}).\n' +
   'Zero results are NOT permission to grep — work the diagnostics ladder (list_indexed_repositories → ' +
   'get_repository_stats → check_job_status) and say which rung failed.\n' +
   'Genuinely outside the graph (prose/config, file counts, re-reading a span Memtrace already returned)? ' +
