@@ -16,6 +16,15 @@ A collection of [Claude Code](https://docs.claude.com/en/docs/claude-code/overvi
 | [`ci-preflight/`](ci-preflight/) | Pre-push checklist that prevents CI whiplash — multiple red pushes that could have been caught locally. Guards against three anti-patterns: missing registration surfaces when adding new shipped files, skipping `npm test` before pushing, and guessing at cross-platform fixes instead of diagnosing the root cause. |
 | [`gsd-core-hooks/`](gsd-core-hooks/) | **A full hook suite, lifted from a real project.** Fourteen `PreToolUse`/`PostToolUse` scripts, each closing one named, dated incident: a passing test-runner verdict bound to the exact commit sha before push, no local `node --test`, Memtrace evidence required on a PR approval, and guards against harness poll/timeout false-negatives (backgrounded dispatch, foreground poll-loop kills, self-matching `pgrep` waits). Backs the rules `commands/` states in prose. Not generic — see its `README.md` for what to adapt. |
 
+## Not a skill
+
+| Directory | What it is |
+|---|---|
+| [`claude-guards/`](claude-guards/) | **Personal guard hooks, version-controlled.** Thirteen `PreToolUse`/`SessionStart`/`Stop`/`SubagentStop` scripts kept here and symlinked into `~/.claude/hooks/`, so the canonical copy is in git rather than only on one machine. Registered at user scope, so they apply across every project: Memtrace-first code discovery, model-tier routing, no-defer enforcement, worktree discipline, CI-rerun blocking. Three ship regression suites (199 / 49 / 66 cases). Not packaged, no `SKILL.md`, not installable with the `skills` CLI — read it as a worked example of hook scoping, not as a drop-in. |
+
+Distinct from [`gsd-core-hooks/`](gsd-core-hooks/), which is a packaged skill documenting *one
+project's* suite. `claude-guards/` is cross-project policy.
+
 ## Commands
 
 [`commands/`](commands/) holds workflow directives as Claude Code **slash commands** —

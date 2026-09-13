@@ -61,6 +61,22 @@ Escape-hatch env vars (`GSD_WORKTREE_GUARD_OFF`, `GSD_MEASURE_GUARD_OFF`,
 live contracts — an exported bypass in your shell rc or a committed marker in another
 repo would silently stop working.
 
+## This repo is exempt from worktree-guard
+
+`worktree-guard.cjs` denies code writes in a main checkout, and it is registered at user
+scope, so it fires here too. This repo commits `.gsd/main-checkout-ok` to opt out.
+
+That is not a convenience. The guard's premise is that agentic coding belongs in a linked
+worktree because `/security-review`, the push gate, and Memtrace's overlay all resolve
+against the session cwd. That premise holds for a repo whose code is the product. It does
+not hold here, where the tracked files *are* the hooks and editing them is inherently
+main-checkout work — a worktree copy would test a symlink target that nothing points at.
+
+The marker is preferred over the `GSD_WORKTREE_GUARD_OFF` env bypass for the reason the
+guard's own header gives: a committed marker is version-controlled, scoped to one repo, and
+visible in review, whereas an exported env var silently covers every sibling repo in that
+shell.
+
 ## Tests
 
 Three guards ship regression suites; run them after any edit — a hook that silently
@@ -75,5 +91,14 @@ cd ~/.claude/hooks
 
 ## Restoring
 
-Pre-symlink originals are preserved in timestamped `.pre-symlink-backup-*/` directories
-under `~/.claude/hooks/`, and prior settings in `settings.json.bak.pre-scope-demote-*`.
+Every change to these hooks leaves a timestamped backup. To undo one, copy the relevant
+file back and restart Claude Code.
+
+| To undo | Restore from |
+|---|---|
+| The symlinking itself | `~/.claude/hooks/.pre-symlink-backup-*/` |
+| The user -> gsd-core scope demotion | `~/.claude/settings.json.bak.pre-scope-demote-*` |
+| The un-prefix + re-globalize | `~/.claude/settings.json.bak.pre-unprefix-*` and `~/projects/gsd-core/.claude/settings.json.bak.pre-unprefix-*` |
+
+The un-prefix backups come in a matching pair — that change edited both settings files, so
+restoring only one leaves a guard registered at both scopes or at neither.
