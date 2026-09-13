@@ -1018,6 +1018,13 @@ function denyOutput(reasonFragment, toolLabel) {
     'Use Memtrace instead: mcp__memtrace__find_symbol (exact symbol -> file:start:end), ' +
     'find_code (NL/concept search), get_source_window (bounded span read), ' +
     'get_symbol_context / get_impact (callers, blast radius). ' +
+    'NO mcp__memtrace__* TOOLS? Restricted subagents (gsd-*, and any agent whose `tools:` \n' +
+    'frontmatter omits the MCP server) reach the SAME graph over Bash via the `mt` CLI: \n' +
+    '  mt find_symbol \'{\"name\":\"Foo\",\"repo_id\":\"bar\"}\'\n' +
+    '  mt find_code   \'{\"query\":\"concept\",\"repo_id\":\"bar\",\"limit\":5}\'\n' +
+    '  mt get_source_window \'{\"file_path\":\"a/b.ts\",\"start_line\":10,\"end_line\":40}\'\n' +
+    '`mt tools` lists every tool. Identical server, no tool grant needed. This is the \n' +
+    'prescribed route for a restricted agent — NOT a reason to fall back to grep. ' +
     'CAVEAT: in a git worktree, brand-new symbols live in an overlay. ONLY find_code takes a ' +
     '`worktree` param — find_symbol / get_symbol_context / get_impact do NOT, so a miss from ' +
     'those is not proof of absence; re-ask find_code({repo_id, query, worktree}). ' +
