@@ -255,7 +255,17 @@ if (carry) {
   process.exit(0);
 }
 
-const gtArgs = base ? ['--base', base, '--head', head, ...rest] : ['--base', 'next', '--head', head, ...rest];
+// The injected default base is PINNED to the literal sha of origin/next (the
+// ref name is the last-resort fallback only). A named ref is mutable: a sibling
+// merge landing between the caller's fetch and this dispatch makes gsd-test
+// build the attribution diff range from a stale base, and the bench then
+// correctly reports drift for a range that was never this branch's diff
+// (observed 2026-09-04). Same literal-sha discipline as --head. A
+// caller-supplied --base is forwarded as-is — the caller owns that choice.
+const defaultBase = (git(['rev-parse', 'origin/next']).stdout || '').trim();
+const gtArgs = base
+  ? ['--base', base, '--head', head, ...rest]
+  : ['--base', /^[0-9a-f]{40}$/.test(defaultBase) ? defaultBase : 'next', '--head', head, ...rest];
 
 // --dry-run: report the decision and exit WITHOUT spawning gsd-test. Lets the
 // short-circuits above be tested (and lets an agent ask "would this cost me a
