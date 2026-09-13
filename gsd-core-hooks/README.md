@@ -111,8 +111,8 @@ Every hook here assumes pieces of gsd-core's specific toolchain. At minimum:
   guard that demands a tool you don't have just denies everything.
   The Memtrace-first *code-discovery* guard that used to live here was **removed**: it is not
   specific to this project, and a second, more complete implementation of the same rule already
-  ships as global policy in [`../claude-guards/`](../claude-guards/) (`memtrace-first-guard.cjs`,
-  191-case suite). Two copies of one rule under one name is a trap, not redundancy.
+  ships as global policy in [`../claude-guards/`](../claude-guards/), as
+  `memtrace-first-guard.cjs`. Two copies of one rule under one name is a trap, not redundancy.
 - **The build pipeline.** `emitted-cjs-read-guard.cjs` is specific to one repo's `.cts` → `.cjs` tsc
   output convention (ADR-457 in the source project). Drop it unless you have an analogous
   generated-file trap.
