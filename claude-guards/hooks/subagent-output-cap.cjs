@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // gsd-hook-version: 1.0.0
-// gsd-subagent-output-cap.cjs — SubagentStop backstop for the return
-// contract injected by gsd-agent-dispatch-guard.cjs.
+// subagent-output-cap.cjs — SubagentStop backstop for the return
+// contract injected by agent-dispatch-guard.cjs.
 //
 // Some subagents ignore an injected prompt-level instruction (context
 // pressure, a brief that overrides it, plain non-compliance). This hook
@@ -28,7 +28,7 @@
 // loop the one-shot flag also guards against, so it is checked first and
 // unconditionally short-circuits to a no-op.
 //
-// Standalone by design (no sibling `require`) — see gsd-tier-guard.cjs for
+// Standalone by design (no sibling `require`) — see tier-guard.cjs for
 // why hook scripts in this directory never require a sibling file.
 //
 // Fail-open contract: any unexpected error anywhere below results in a
@@ -83,7 +83,7 @@ function pruneOldFlags() {
 
 function emitBlock(length, cap) {
   let reason =
-    'gsd-subagent-output-cap: your final response was ' + length + ' chars against a ' + cap +
+    'subagent-output-cap: your final response was ' + length + ' chars against a ' + cap +
     ' char cap. Re-send the final response only, under the cap: keep just conclusions and ' +
     'file:line references, drop file contents, diffs, restated brief, and narration. If the ' +
     'detail is genuinely needed, write it to a file and return the path plus a short abstract.';

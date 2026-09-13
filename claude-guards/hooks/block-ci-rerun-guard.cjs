@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * gsd-block-ci-rerun-guard.cjs — PreToolUse hook (Bash).
+ * block-ci-rerun-guard.cjs — PreToolUse hook (Bash).
  *
  * Blocks any command whose only function is to re-trigger a CI/test run
  * instead of diagnosing a failure: `gh run rerun`, `gh api .../rerun` and

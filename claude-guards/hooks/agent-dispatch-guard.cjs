@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // gsd-hook-version: 1.0.0
-// gsd-agent-dispatch-guard.cjs — PreToolUse guard on the "Agent" tool.
+// agent-dispatch-guard.cjs — PreToolUse guard on the "Agent" tool.
 //
 // Rule (~/.claude/CLAUDE.md AGENT-TIER DISCIPLINE): opus is the architect;
 // generic dispatches ("general-purpose" and friends) silently inherit the
@@ -15,7 +15,7 @@
 //   JOB B — for every call this hook does NOT deny, inject a compact
 //   "return contract" onto the end of the prompt so the subagent hands back
 //   a short, dense report instead of flooding the parent's context with
-//   pasted file contents, diffs, and narration. gsd-subagent-output-cap.cjs
+//   pasted file contents, diffs, and narration. subagent-output-cap.cjs
 //   is the SubagentStop-side backstop for when a subagent ignores this
 //   contract anyway.
 //
@@ -158,7 +158,7 @@ function main() {
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
       permissionDecision: 'allow',
-      permissionDecisionReason: 'gsd-agent-dispatch-guard: return contract injected.',
+      permissionDecisionReason: 'agent-dispatch-guard: return contract injected.',
       updatedInput,
     },
   }));

@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * gsd-block-timeout-increase-guard.cjs — PreToolUse hook (Write|Edit|MultiEdit).
+ * block-timeout-increase-guard.cjs — PreToolUse hook (Write|Edit|MultiEdit).
  *
  * Blocks an edit that increases a numeric timeout value, unless the user
  * explicitly instructed it in the current turn. Raising a timeout budget is

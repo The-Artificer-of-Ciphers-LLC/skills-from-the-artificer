@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gsd-measure-dont-infer-guard.cjs — PreToolUse DENY guard enforcing
+// measure-dont-infer-guard.cjs — PreToolUse DENY guard enforcing
 // "measure, don't infer": a grep/rg TEXT-match count is not a fact about
 // code. It counts comment prose, string literals, and near-miss
 // identifiers, not the actual AST construct being claimed.
@@ -200,7 +200,7 @@ function main() {
   // justification comment, re-ran, allowed).
   //
   // An escape the constrained party can mint is not a control. The sound
-  // design is the one gsd-memtrace-first-guard already uses: an env var that
+  // design is the one memtrace-first-guard already uses: an env var that
   // must be EXPORTED IN THE SHELL THAT LAUNCHES CLAUDE CODE. This hook runs
   // as its own process, so the pending command text is not in its
   // environment and an inline `VAR=1 <cmd>` prefix cannot reach it.

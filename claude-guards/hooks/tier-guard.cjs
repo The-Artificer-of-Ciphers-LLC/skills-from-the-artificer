@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // gsd-hook-version: 1.0.0
-// gsd-tier-guard.cjs — PreToolUse guard on Write|Edit|MultiEdit.
+// tier-guard.cjs — PreToolUse guard on Write|Edit|MultiEdit.
 //
 // Rule (~/.claude/CLAUDE.md AGENT-TIER DISCIPLINE): opus is the architect;
 // hand-authoring code in the opus MAIN session is scope opus should be
@@ -13,7 +13,7 @@
 // individually and a cross-file require is a staging dependency that can
 // fail silently in that path. This is why tier classification and the Kimi
 // alias table are duplicated here rather than shared with
-// gsd-session-model.cjs.
+// session-model.cjs.
 //
 // Fail-open contract: any unexpected error anywhere below results in a
 // silent exit(0). A guard that can wedge Write/Edit for every session on an
@@ -74,7 +74,7 @@ function normalizeToolName(rawName) {
 }
 
 // Tier lookup is keyed off the SessionStart record written by
-// gsd-session-model.cjs. Any failure to read/parse it (record not yet
+// session-model.cjs. Any failure to read/parse it (record not yet
 // written, corrupted, session_id not recognized) falls back to classifying
 // $ANTHROPIC_MODEL directly rather than throwing — an absent tier record is
 // not an error condition, it's just a session we haven't seen a
@@ -181,7 +181,7 @@ function denyOutput(targetPath, note) {
 // session, so the guard degrades to advisory-only rather than blocking.
 function handleDeny(mode, targetPath, note) {
   if (mode === 'warn') {
-    process.stderr.write(`gsd-tier-guard: [warn-only, tier=unknown] would deny "${targetPath}": ${note}\n`);
+    process.stderr.write(`tier-guard: [warn-only, tier=unknown] would deny "${targetPath}": ${note}\n`);
     return;
   }
   denyOutput(targetPath, note);
@@ -282,14 +282,14 @@ function main() {
 
   if (count <= freeEdits) {
     process.stderr.write(
-      `gsd-tier-guard: sub-threshold edit ${count}/${freeEdits} allowed for opus this session (${targetPath}).\n`
+      `tier-guard: sub-threshold edit ${count}/${freeEdits} allowed for opus this session (${targetPath}).\n`
     );
     return;
   }
 
   if (mode === 'warn') {
     process.stderr.write(
-      `gsd-tier-guard: [warn-only, tier=unknown] small-edit budget (${freeEdits}) exhausted (count=${count}); would deny in enforce mode: ${targetPath}\n`
+      `tier-guard: [warn-only, tier=unknown] small-edit budget (${freeEdits}) exhausted (count=${count}); would deny in enforce mode: ${targetPath}\n`
     );
     return;
   }
