@@ -33,6 +33,7 @@ These are **global policy**, not one project's workflow — so they are register
     block-timeout-increase-guard.cjs      Write|Edit|MultiEdit
     measure-dont-infer-guard.cjs          Bash
     block-ci-rerun-guard.cjs              Bash
+    worktree-reap.sh                      PostToolUse:Bash + SessionStart
     worktree-guard.cjs                    Write|Edit|MultiEdit
     agent-dispatch-guard.cjs              Agent
     run-incomplete-guard.cjs              Stop
@@ -102,3 +103,33 @@ file back and restart Claude Code.
 
 The un-prefix backups come in a matching pair — that change edited both settings files, so
 restoring only one leaves a guard registered at both scopes or at neither.
+
+## worktree-reap.sh — housekeeping, not a guard
+
+The only entry here that does not BLOCK anything. Agent worktrees under
+`<repo>/.claude/worktrees/` accumulate forever: each one is a full checkout, and any
+tool that indexes per-directory (Memtrace, for one) will happily index each as a
+separate repository. One real case reached 22 stale worktree-scoped repo IDs holding
+75% of the nodes in a 34 GB index.
+
+It removes a worktree only when ALL THREE hold:
+
+1. its branch is fully merged into the default branch, AND
+2. its working tree is clean, AND
+3. it is not locked
+
+and only for worktrees under `<repo>/.claude/worktrees/`, so hand-made worktrees
+elsewhere are out of range. It uses `git worktree remove` and `git branch -d` — never
+the `--force`/`-D` variants — so git itself refuses to discard unmerged work even if
+the predicate were wrong. It always exits 0: a hook that blocks your `git merge` is
+worse than the stale worktree it was cleaning up.
+
+`WORKTREE_REAP_DRYRUN=1` prints what it would remove and touches nothing. Run that
+first in any repo — verify the selection against `git worktree list` before letting it
+act. Reaped worktrees are appended to `~/.claude/hooks/worktree-reap.log` (last 500
+lines kept).
+
+Registered async so it cannot stall a merge. Note that the `if: "Bash(git merge*)"`
+filter has been observed firing on non-merge Bash calls; the script is idempotent and
+cheap, so this is wasteful rather than harmful, but do not rely on the filter for
+correctness.
