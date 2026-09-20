@@ -175,6 +175,11 @@ const EXPLICIT_PATTERN_FLAGS = new Set(['-e', '--regexp', '-f', '--file']);
 // git subcommands that are FILE-READ surfaces, not history queries. 1.4.0
 // exempted all of git, so `git show HEAD:<source>` was a one-token bypass.
 const GIT_READ_SUBCOMMANDS = new Set(['show', 'cat-file', 'grep']);
+// Subcommands where a `--` separator introduces a PATHSPEC that SCOPES a diff
+// rather than naming a file to dump. `git grep` is deliberately EXCLUDED: its
+// `-- <path>` really is a source-text search and must keep answering to
+// Memtrace.
+const GIT_DIFF_PATHSPEC_SUBCOMMANDS = new Set(['show']);
 const GIT_PREFIX_RE = /^\s*git(\.exe)?\s/;
 // A leading `cd <path>` (optionally chained with `&&`/`;`, or on its own
 // line before the real command) is a routine, benign shell habit that must
@@ -286,6 +291,32 @@ function isUnderTempDir(absPath) {
   return tempDirRoots().some((root) => norm === root || norm.startsWith(`${root}/`));
 }
 
+// Agent-harness config trees are NEVER part of an indexed source repo, even
+// when a file there carries a source extension (`.claude/hooks/*.cjs`).
+// `.claude` is already in NOT_INDEXED_DIRS, but that only matches when the
+// segment appears in the LITERAL operand text: a bare basename read after
+// `cd ~/.claude/hooks` resolves against the SESSION cwd, so the segment never
+// appears and the guard denied reads of its own source (measured 2026-09-20).
+// Anchoring on the resolved absolute path closes that without touching
+// repo-internal semantics.
+function neverIndexedRoots() {
+  const roots = [];
+  const home = os.homedir();
+  if (home) roots.push(path.join(home, '.claude'));
+  if (process.env.CLAUDE_CONFIG_DIR) roots.push(process.env.CLAUDE_CONFIG_DIR);
+  return roots
+    .filter((p) => typeof p === 'string' && p.length > 0)
+    .map((p) => normalizeSlashes(p).replace(/\/+$/, ''))
+    .map((p) => {
+      try { return normalizeSlashes(fs.realpathSync(p)).replace(/\/+$/, ''); } catch { return p; }
+    });
+}
+
+function isUnderNeverIndexedRoot(abs) {
+  const n = normalizeSlashes(abs).replace(/\/+$/, '');
+  return neverIndexedRoots().some((r) => n === r || n.startsWith(`${r}/`));
+}
+
 // HOLE B: a temp path is exempt (FP1) UNLESS it is a clone of the very repo
 // we are currently in. Compare `remote.origin.url` of the git repo containing
 // the path against the current repo's. Memoized per directory; any git
@@ -337,6 +368,7 @@ function isPlausiblyIndexed(pathLike, cwd, toplevel) {
   if (!toplevel) return false; // no repo here (or git errored) -> can't be indexed
   const abs = resolveAbsolute(cwd, pathLike);
   if (!abs) return false;
+  if (isUnderNeverIndexedRoot(abs)) return false;
   if (isUnderTempDir(abs)) return isCloneOfCurrentRepo(abs, toplevel);
   const normAbs = normalizeSlashes(abs);
   const normTop = normalizeSlashes(toplevel).replace(/\/+$/, '');
@@ -693,11 +725,21 @@ function gitClauseOperands(tokens) {
   }
   if (!GIT_READ_SUBCOMMANDS.has(sub)) return [];
   const ops = [];
+  let afterDoubleDash = false;
   for (let i = subIdx + 1; i < tokens.length; i += 1) {
     const raw = tokens[i];
-    if (raw.startsWith('-') && raw !== '--') continue;
+    if (stripQuotes(raw) === '--') { afterDoubleDash = true; continue; }
+    if (raw.startsWith('-')) continue;
     const t = normalizeOperand(raw);
-    if (!t || t === '--') continue;
+    if (!t) continue;
+    // Everything after `--` in these subcommands is a pathspec that SCOPES a
+    // diff (`git show <rev> -- <path>`), not a file whose contents are dumped.
+    // The dump form is the colon form `git show <rev>:<path>`, still captured
+    // below. Reviewing a commit's diff is a version-control question Memtrace
+    // structurally cannot answer — it indexes neither diffs nor agent
+    // worktrees — so denying it left no usable path at all (measured
+    // 2026-09-20, blocking review of a worktree agent's commit).
+    if (afterDoubleDash && GIT_DIFF_PATHSPEC_SUBCOMMANDS.has(sub)) continue;
     // `git show HEAD:path/to/file` — the path is after the first colon.
     ops.push(t.includes(':') ? t.slice(t.indexOf(':') + 1) : t);
   }
@@ -852,6 +894,17 @@ function checkBash(command, cwd, toplevel) {
     if (!op) continue;
     if (!hasSourceExtOrSourceGlob(op)) continue;
     if (isNotIndexedPath(op)) continue;
+    // A non-glob operand that resolves to nothing cannot be an indexed source
+    // file. extractPathOperands() STRIPS a leading `cd` rather than resolving
+    // against it, so `cd <dir> && sed -n ... <basename>` resolved the basename
+    // against the SESSION cwd and denied the read while naming a phantom path
+    // that does not exist (measured 2026-09-20). Globs are deliberately exempt
+    // from this check — they never name an existing literal path, so applying
+    // it to them would reopen `--include='*.swift'`.
+    if (!/[*?[\]{}]/.test(op)) {
+      const absOp = resolveAbsolute(cwd, op);
+      if (!absOp || !fs.existsSync(absOp)) continue;
+    }
     if (!isPlausiblyIndexed(op, cwd, toplevel)) continue;
     return `path operand "${op}" is an indexed source file`;
   }
