@@ -776,13 +776,27 @@ function splitInputRedirects(tokens) {
   return { kept, redirIn };
 }
 
+// A bare `$VAR` / `${VAR}` reference inside an already-extracted read operand
+// (e.g. the `$F` in `cat "$F"`, after normalizeOperand strips its quotes).
+const VAR_REF_RE = /\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?/g;
+
 // THE function. Returns every token this command would actually hand to a
 // file-reading binary as a path.
 function extractPathOperands(command) {
   const cleaned = stripComments(stripHeredocBodies(stripLeadingCd(command)));
   const clauses = cleaned.split(CLAUSE_SPLIT_RE);
   const operands = [];
-  let sawReadClause = false;
+  // Which variable NAMES are actually dereferenced by a real read clause
+  // (`cat "$F"`), as opposed to merely assigned somewhere in the command.
+  // Scoped per-command like `sawReadClause` was, but keyed on the variable
+  // itself rather than "any read clause exists anywhere" -- see below.
+  const readReferencedVars = new Set();
+
+  const collectVarRefs = (op) => {
+    VAR_REF_RE.lastIndex = 0;
+    let vm;
+    while ((vm = VAR_REF_RE.exec(op)) !== null) readReferencedVars.add(vm[1]);
+  };
 
   for (const clause of clauses) {
     const rawTokens = clause.trim().split(/\s+/).filter(Boolean);
@@ -798,24 +812,36 @@ function extractPathOperands(command) {
     // FP3/FP5: an interpreter/pkg-manager EXECUTING a script is not a read.
     const scriptArg = getExecutedScriptArg(tokens);
     if (!READ_BIN_WORDS.has(bin)) continue;
-    sawReadClause = true;
     for (const r of redirIn) {
       const rt = normalizeOperand(r);
-      if (rt) operands.push(rt); // P4: `cat < <src>` reads <src>
+      if (rt) { operands.push(rt); collectVarRefs(rt); } // P4: `cat < <src>` reads <src>
     }
     for (const op of clauseOperands(tokens, bin)) {
       if (scriptArg && op === normalizeOperand(scriptArg)) continue;
       operands.push(op);
+      collectVarRefs(op);
     }
   }
 
-  // `F=<path>` followed by `cat "$F"`. The assignment value only counts as an
-  // operand when the command actually contains a read clause, so a plain
-  // `SRC=src/a.cts npm run build` stays untouched.
-  if (sawReadClause) {
+  // `F=<path>` followed by `cat "$F"`. FP6: this used to fire whenever the
+  // command contained a read clause ANYWHERE, so an unrelated `grep`/`cat`
+  // clause in one part of a large script "lent" its read-ness to EVERY
+  // `VAR=value` assignment in the whole script -- including a bootstrap
+  // line like `_GSD_SHIM_NAME="gsd-tools.cjs"` that no read clause ever
+  // dereferences (measured 2026-09-17: a GSD tooling-resolver block with an
+  // unrelated `grep -q ...` probe elsewhere in the same Bash call got its
+  // `_GSD_SHIM_NAME` assignment denied as "path operand \"gsd-tools.cjs\" is
+  // an indexed source file", even though that value is only ever handed to
+  // `node`, never to a read binary). Scoping the assignment scan to
+  // variables actually dereferenced (`$VAR`/`${VAR}`) by a real read-clause
+  // operand closes that cross-clause leak while keeping the motivating case
+  // -- `F=src/a.cts; cat "$F"` -- caught.
+  if (readReferencedVars.size) {
     const assignRe = /(?:^|[\s;&|(])([A-Za-z_][A-Za-z0-9_]*)=([^\s;&|)]+)/g;
     let m;
-    while ((m = assignRe.exec(cleaned)) !== null) operands.push(normalizeOperand(m[2]));
+    while ((m = assignRe.exec(cleaned)) !== null) {
+      if (readReferencedVars.has(m[1])) operands.push(normalizeOperand(m[2]));
+    }
   }
   return operands;
 }
@@ -1018,13 +1044,13 @@ function denyOutput(reasonFragment, toolLabel) {
     'Use Memtrace instead: mcp__memtrace__find_symbol (exact symbol -> file:start:end), ' +
     'find_code (NL/concept search), get_source_window (bounded span read), ' +
     'get_symbol_context / get_impact (callers, blast radius). ' +
-    'NO mcp__memtrace__* TOOLS? Restricted subagents (gsd-*, and any agent whose `tools:` \n' +
-    'frontmatter omits the MCP server) reach the SAME graph over Bash via the `mt` CLI: \n' +
-    '  mt find_symbol \'{\"name\":\"Foo\",\"repo_id\":\"bar\"}\'\n' +
-    '  mt find_code   \'{\"query\":\"concept\",\"repo_id\":\"bar\",\"limit\":5}\'\n' +
-    '  mt get_source_window \'{\"file_path\":\"a/b.ts\",\"start_line\":10,\"end_line\":40}\'\n' +
-    '`mt tools` lists every tool. Identical server, no tool grant needed. This is the \n' +
-    'prescribed route for a restricted agent — NOT a reason to fall back to grep. ' +
+    'NO mcp__memtrace__* TOOLS, or Memtrace unavailable / quota-exhausted? Use the CodeGraph \n' +
+    'MCP server instead. It indexes the same repository, returns verbatim line-numbered \n' +
+    'source, and has no monthly quota: \n' +
+    '  mcp__codegraph__codegraph_explore — name a symbol, file, or question; returns the \n' +
+    '    relevant source plus the call paths between those symbols. \n' +
+    'That is the prescribed fallback — NOT a reason to fall back to grep. Both graphs are \n' +
+    'reached over MCP ONLY; there is no supported CLI for either. ' +
     'CAVEAT: in a git worktree, brand-new symbols live in an overlay. ONLY find_code takes a ' +
     '`worktree` param — find_symbol / get_symbol_context / get_impact do NOT, so a miss from ' +
     'those is not proof of absence; re-ask find_code({repo_id, query, worktree}). ' +
