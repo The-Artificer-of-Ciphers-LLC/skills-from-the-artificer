@@ -23,7 +23,7 @@ each by classification:
 End state: bugs triaged with a fix brief; enhancements and features evaluated for
 viability with a maintainer decision recorded on the tracker.
 
-**Flow:** Setup + scope → needs-reproduction follow-up → dedupe adjudication → classify → Defect lane / Enhancement lane / Feature lane → ship queued `.out-of-scope/` entries as one PR → batch summary.
+**Flow:** Setup + scope → needs-reproduction follow-up → dedupe adjudication → classify → Defect lane / Enhancement lane / Feature lane → ship queued `.out-of-scope/` entries as one PR **and merge it** → batch summary → **clean up the run's artifacts**.
 
 Arguments: `$ARGUMENTS`
 </objective>
@@ -55,6 +55,7 @@ maintainer decided something; you produce the artifact, or the label/close/PR do
 | `30-decisions.json` | **Steps 1b, 4–5** | `gh issue close` *(unless N is diagnosed)* |
 | `40-oos-queue.json` | **Steps 4–5** | `gh pr create` |
 | `90-summary.md` | **Step 7** | *(terminal — **writing it DISARMS the run**)* |
+| *(none — deletes all of the above)* | **Step 8** | *(runs after the KB PR is merged; leaves `.gsd/triage/` empty of run artifacts)* |
 
 Enforced by `.claude/hooks/gsd-phase-gate.cjs`. Escape is `GSD_PHASE_GATE_OVERRIDE=1`, human-issued
 only and logged — **never self-issue it.**
@@ -314,6 +315,19 @@ self-approval of your own work.
 <process>
 
 <step name="0_setup_and_scope">
+**Clear leftovers from an earlier run first.** Step 8 normally leaves `.gsd/triage/` empty, but a
+run that was interrupted before step 8 leaves its artifacts behind. They are dangerous, not just
+clutter: a stale `90-summary.md` keeps this run DISARMED (the hook sees a finished run), and stale
+`20-diagnosis/<N>.md` files would satisfy the `confirmed-bug` gate for an issue this run never
+diagnosed.
+
+- If `.gsd/triage/00-run.json` exists **and** `.gsd/triage/90-summary.md` exists, the earlier run
+  finished: run the step-8 cleanup block now, then continue.
+- If `00-run.json` exists **without** `90-summary.md`, an earlier run is still open. Read its
+  `10-worklist.md`: any row without a disposition is unfinished tracker work. Tell the maintainer
+  which issues it left open, then run the step-8 cleanup block and start fresh. Those issues are
+  still `needs-triage` on the tracker, so this run picks them up again.
+
 **Parse args** from `$ARGUMENTS`:
 - `--repo owner/repo` → target repo (default: detected below)
 - `--issue N` → operate on a single issue only (still classifies + routes it)
@@ -660,35 +674,69 @@ written). **Recording `{"entries":[]}` is not skipping the step — it is comple
 3. **Write each entry** using the repo's ACTUAL house format — read a sibling in
    `.out-of-scope/` first and match it; do not invent a shape. See `<templates>`.
 4. **Commit** as `docs(#<issue>): record <thing> as out-of-scope`. Conventional commits required.
-5. **Gates — all of them, in this order.** These are the same gates any PR faces; a doc-only diff
-   does NOT exempt you (CI inert-skips the matrix, but the local pre-PR gate does not):
-   - `npm run lint:ci` → exit 0. (`npm run lint` is NOT the CI gate — `lint:ci` is.)
+5. **Gates — the `.out-of-scope/` carve-out.** A KB entry is an informational markdown file: no
+   code, no runtime-loaded text, nothing executes it, and adding one bypasses nothing. The diff
+   must contain **only** `.out-of-scope/*.md` files. Check it with
+   `git diff --name-only origin/<default-branch>...HEAD` and HALT if anything else appears. With
+   that diff, the gates are exactly:
+   - `npm run lint:ci` → exit 0. (`npm run lint` is NOT the CI gate — `lint:ci` is.) If it fails
+     on generated-file staleness (e.g. `INVENTORY-MANIFEST.json is stale` naming files you did
+     not touch), the worktree's local build is stale: run `npm run build`, confirm
+     `git status --short` stays clean, and re-run. Any other failure is a real red gate.
    - `GITHUB_BASE_REF=<default-branch> node scripts/changeset/lint.cjs` → expect
      `ok_no_user_facing_changes` (a KB doc is not user-facing code, so no changeset fragment).
    - `GITHUB_BASE_REF=<default-branch> node scripts/lint-docs-required.cjs` → expect
      `ok_no_triggering_fragments`.
    - **⚠️ Set `GITHUB_BASE_REF` explicitly on both lints.** Without it they resolve a wrong base
      ref and **false-pass** — they will report success on a diff they never examined.
-   - The repo's test gate must record a pass for the EXACT sha being pushed, per the project's
-     `CLAUDE.md`. Commit first (the runner is ref-based; a dirty tree yields a false green),
-     capture the sha with `git rev-parse HEAD` as its own step, and pass it as a LITERAL 40-hex
-     value — never `HEAD`, never a command substitution. Run it detached and read the verdict
-     from disk; do not foreground it.
-   - **Two orthogonal reviews**, at least one in a fresh reviewer context that did not author the
-     change. Findings at any severity block the PR.
-6. **Open the PR.** Read the matching template in `.github/` first. A KB-only diff has no
+   - **No test run and no orthogonal-review pass.** Both exist to keep untested or unreviewed
+     *code* off shared branches, and this diff has none. The push gate and the PR gate
+     (`pre-pr-gate.sh`) exempt `.out-of-scope/*.md`-only diffs from both arms by design, so
+     `git push`, `gh pr create` and `gh pr merge` succeed with no verdict and no token. **Never
+     add `GSD_PR_GATES_OK=1` or any other override token.** If a gate denies an
+     `.out-of-scope/*.md`-only diff anyway, that is a defect in the gate: HALT and surface the
+     denial verbatim.
+   - Before committing, re-read each entry against the facts it cites (symbol names, file paths,
+     the maintainer's recorded verdict in `30-decisions.json`). An entry that misstates what was
+     denied misfires on every future prior-denial check.
+6. **Push and open the PR.** Read the matching template in `.github/` first. A KB-only diff has no
    applicable template — precedent is to lead the body with an explicit exemption marker:
    `<!-- pr-template-exempt: doc-only — adds `.out-of-scope/` knowledge-base document(s). No code, no runtime-loaded text, no behavior change. -->`
-   The body MUST contain `Closes #<issue>` for each recorded issue (the gate hard-fails without
-   it) and must state the gate results from step 5. Write the body to a file and pass
+   **Issue link — pick per issue:**
+   - The recorded issue was **closed** in this run (full deny / No-go) → `Closes #<issue>` is
+     harmless, and a non-closing `Refs #<issue>` also passes.
+   - The issue must **stay open** (a *partial* approval, where only one half was denied and the
+     approved half still needs building) → use **`Refs #<issue>`, never `Closes`**. A closing
+     keyword would close the approved work. The "Issue link required" check accepts `Refs #N`
+     for a diff that touches only `.out-of-scope/*.md`.
+   - ⚠️ **GitHub finds closing keywords anywhere in the body, prose included, and ignores
+     negation.** "does not close #N", "won't fix #N" and "this resolves nothing in #N" all link
+     #N as closing, and the merge then closes it. When #N must stay open, the body must not
+     contain `close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`, `resolves` or
+     `resolved` followed by `#N`. Say "#N stays open for the approved half" instead. Before
+     merging, `gh pr view <N> --json closingIssuesReferences` must not list it; if it does, edit
+     the body and check again.
+   The body must state the gate results from step 5. Write the body to a file and pass
    `--body-file`; never a heredoc.
-7. **Report the PR URL in the step-7 summary** and set each entry's `pr` in
-   `40-oos-queue.json`. Say plainly if the PR is open-but-unmerged so the entry is not assumed to
-   be live yet.
+7. **Merge it.** The run is not finished while the entry sits in an open PR: the next run's
+   prior-denial check reads the default branch, not open PRs.
+   - Wait for CI: `gh pr checks <N> --repo <repo> --watch --interval 30`, run in the background
+     (never a foreground poll), then read `gh pr checks <N>` for the final state.
+   - **Every check passing or skipped** → merge:
+     `gh pr merge <N> --repo <repo> --squash --delete-branch`.
+     If GitHub refuses only because the branch policy requires an approving review
+     (`reviewDecision: REVIEW_REQUIRED`, every check green), merge with `--admin` added. Covering
+     a missing reviewer is the one sanctioned use of admin merge.
+   - **Any check failing** → HALT and surface it verbatim. **Never** admin-merge over a failing,
+     pending or cancelled check.
+   - Confirm `gh pr view <N> --json state` reports `MERGED`, then set each entry's `pr` in
+     `40-oos-queue.json` and record the merge commit.
+   - Confirm every issue that had to stay open is still `OPEN`. If one was closed by the merge,
+     reopen it with a one-line comment saying the approved half is still to be built.
 
 **If a gate is red, HALT and surface it verbatim.** Do not push, do not emit an override token,
-do not "record it and move on". An unshipped entry is reported as unshipped — never silently
-dropped.
+do not "record it and move on". An unshipped or unmerged entry is reported as such in the
+summary, and step 8 does NOT run — the artifacts stay so the next run's step 0 can report them.
 </step>
 
 <step name="7_summary">
@@ -708,7 +756,7 @@ via whichever lane it landed in. Separately list: issues left untouched (with wh
 needs-version/still-waiting; `possible-duplicate` no longer belongs on this "left untouched"
 list, since step 1b disposes of it) and any genuine maintainer forks awaiting a decision (these
 are still recorded on-tracker as `ready-for-human`, never chat-only). **State the
-`.out-of-scope/` PR from step 6 and its merge state, or "none queued".**
+`.out-of-scope/` PR from step 6 and its merge commit, or "none queued".**
 
 **Reconcile before you disarm.** Every `10-worklist.md` row must have a `Disposition`, and every
 `deny` / `no-go` in `30-decisions.json` must have a matching entry in `40-oos-queue.json`. A
@@ -716,6 +764,36 @@ mismatch is an unfinished disposition — resolve it rather than summarizing ove
 
 Under `--dry-run`, this table is the whole output and nothing was written to the tracker; still
 write `90-summary.md` so the run closes cleanly.
+
+Print the summary in chat in full. Step 8 deletes the file, so the chat copy and the tracker are
+the record.
+</step>
+
+<step name="8_cleanup">
+**Delete this run's artifacts. This is the last action of every completed run.**
+
+Run it only when all three hold: `90-summary.md` exists and was printed; the `.out-of-scope/` PR is
+merged (or the queue was empty); and every `10-worklist.md` row has a disposition. If any of these
+fails, skip this step, keep the artifacts, and name the reason in the final chat message.
+
+Everything durable already lives elsewhere. Dispositions, diagnoses and briefs are on the tracker.
+Denied asks are in `.out-of-scope/` on the default branch. The summary is in chat. What remains
+under `.gsd/triage/` is scratch that goes stale, and a leftover one either disarms the next run or
+satisfies its gates falsely (see step 0).
+
+```bash
+T="$(git rev-parse --show-toplevel)/.gsd/triage"
+rm -rf -- "$T/00-run.json" "$T/10-worklist.md" "$T/20-diagnosis" "$T/30-decisions.json" \
+          "$T/40-oos-queue.json" "$T/90-summary.md" "$T"/archive-* "$T/_raw"
+ls -A "$T"
+```
+
+Keep anything else in `.gsd/triage/`: reusable helpers such as an agent-brief preamble or a
+Memtrace stdio script are not run artifacts. Then, if this run created a worktree or branch for the
+KB PR, remove it once the PR is merged: `git worktree remove <path>` and
+`git branch -D <branch>`. The remote branch is already gone via `--delete-branch`.
+
+Report the `ls -A` output in the final message so the cleanup is visible.
 </step>
 
 </process>
