@@ -27,6 +27,8 @@
 # disabled. The fetch in step 1 still runs for those.
 #
 # Human-only override: prefix the command with GSD_WORKTREE_STALE_OK=1 (logged).
+#
+# Scope: gsd-core only — commands proven to target another repo are ignored (see dir_is_other_repo).
 set -euo pipefail
 
 input="$(cat)"
@@ -104,6 +106,25 @@ if [ "$tool" = "Bash" ]; then
     alt_root="$(git -C "$dash_c" rev-parse --show-toplevel 2>/dev/null || true)"
     [ -n "$alt_root" ] && repo_root="$alt_root"
   fi
+
+  # GSD-CORE ONLY. This guard enforces gsd-core's trunk freshness (origin/next).
+  # A gsd-core session also cuts worktrees in OTHER repos (`cd <other> && git
+  # worktree add …`); gating those demands an origin/next the other repo
+  # cannot have. Stand down ONLY when the target is PROVEN to be another
+  # repository: a git repo with at least one remote and no remote pointing at
+  # open-gsd/gsd-core. Unknown (not a repo, no remotes, unreadable) keeps the
+  # gate on.
+  GSD_CORE_SLUG_RE='(^|[:/])open-gsd/gsd-core(\.git)?/?$'
+  dir_is_other_repo() {
+    local d="$1" urls
+    [ -n "$d" ] && [ -d "$d" ] || return 1
+    git -C "$d" rev-parse --git-dir >/dev/null 2>&1 || return 1
+    urls="$(git -C "$d" remote -v 2>/dev/null | awk '{print $2}' | sort -u)"
+    [ -n "$urls" ] || return 1
+    printf '%s\n' "$urls" | grep -qiE "$GSD_CORE_SLUG_RE" && return 1
+    return 0
+  }
+  if dir_is_other_repo "$repo_root"; then exit 0; fi
 
   if printf '%s' "$cmd" | grep -q 'GSD_WORKTREE_STALE_OK=1'; then
     mkdir -p "$repo_root/.gsd"
