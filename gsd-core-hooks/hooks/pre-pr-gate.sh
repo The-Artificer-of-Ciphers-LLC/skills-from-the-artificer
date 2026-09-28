@@ -14,9 +14,13 @@
 #        somebody else - reviewing/merging a submitted, already-CI-green
 #        contributor PR is not this gate's business. Fail-closed on any doubt.
 #
+#        Doc-only PRs (DOC_ONLY_RE, incl. .out-of-scope/) are exempt from both arms.
+#
 # Human-only override for the push block: prefix the command with
 # GSD_HUMAN_OVERRIDE=1. The agent is FORBIDDEN by CLAUDE.md from ever emitting
 # this token. Every use is appended to .gsd/override.log.
+#
+# Scope: gsd-core only — commands proven to target another repo are ignored (see dir_is_other_repo).
 set -euo pipefail
 
 input="$(cat)"
@@ -108,7 +112,7 @@ verdict_ok() {
 # invisible. Keep `[^/]+\.md` anchored WITHOUT `.*` — that one is deliberately
 # root-only, so runtime-loaded text under a subdirectory
 # (gsd-core/workflows/*.md, agents/*.md, commands/**/*.md) stays gated.
-DOC_ONLY_RE='^(\.changeset/[^/]+\.md|docs/.*|\.out-of-scope/.*|\.github/(PULL_REQUEST_TEMPLATE|ISSUE_TEMPLATE)/.*|[^/]+\.md)$'
+DOC_ONLY_RE='^(\.changeset/[^/]+\.md|docs/.*|\.out-of-scope/.*\.md|\.github/(PULL_REQUEST_TEMPLATE|ISSUE_TEMPLATE)/.*|[^/]+\.md)$'
 is_doc_only_path() { printf '%s' "$1" | grep -qE "$DOC_ONLY_RE"; }
 # The worktree this command actually ships from — same leading `cd <dir>`
 # honoring as shipped_sha(). Without this the doc-only classification inspected
@@ -170,23 +174,158 @@ is_git_push() {
   return 1
 }
 
+# GSD-CORE ONLY. These gates enforce gsd-core's toolchain (gsd-test verdicts,
+# the `next` trunk). A gsd-core session also runs commands against OTHER repos
+# (`cd <other> && git push`, `gh … --repo other/repo`); gating those demands a
+# gsd-test pass or an origin/next that the other repo cannot have. Stand down
+# ONLY when the target is PROVEN to be another repository: a git repo with at
+# least one remote and no remote pointing at open-gsd/gsd-core, or an explicit
+# gh --repo/-R naming a different repo. Unknown (not a repo, no remotes,
+# unreadable) keeps the gate on.
+GSD_CORE_SLUG_RE='(^|[:/])open-gsd/gsd-core(\.git)?/?$'
+dir_is_other_repo() {
+  local d="$1" urls
+  [ -n "$d" ] && [ -d "$d" ] || return 1
+  git -C "$d" rev-parse --git-dir >/dev/null 2>&1 || return 1
+  urls="$(git -C "$d" remote -v 2>/dev/null | awk '{print $2}' | sort -u)"
+  [ -n "$urls" ] || return 1
+  printf '%s\n' "$urls" | grep -qiE "$GSD_CORE_SLUG_RE" && return 1
+  return 0
+}
+gh_repo_flag() {  # prints EVERY gh --repo/-R (or --repo=) value, one per line, empty if none
+  printf '%s' "$cmd" | grep -oE '(^|[[:space:]])(--repo|-R)(=|[[:space:]]+)[^[:space:];&|]+' | sed -E 's/^[[:space:]]*(--repo|-R)(=|[[:space:]]+)//; s/^["'"'"']//; s/["'"'"']$//' || true
+}
+# ONLY "other" if there is at least one --repo/-R value AND every one of them
+# normalizes to something other than open-gsd/gsd-core. A single gsd-core
+# value anywhere in the command (e.g. a chained `gh pr merge … --repo
+# open-gsd/gsd-core` after an earlier `gh … --repo other/x`) proves the
+# command is not confined to another repo, so it returns 1 (keep gating).
+gh_repo_is_other() {
+  local flags r any=0
+  flags="$(gh_repo_flag)"
+  [ -n "$flags" ] || return 1
+  while IFS= read -r r; do
+    [ -n "$r" ] || continue
+    any=1
+    r="$(printf '%s' "$r" | tr 'A-Z' 'a-z' | sed -E 's#^https?://github\.com/##; s#\.git$##; s#/$##')"
+    [ "$r" != "open-gsd/gsd-core" ] || return 1
+  done <<< "$flags"
+  [ "$any" = "1" ]
+}
+scope_debug() { [ "${GSD_SCOPE_DEBUG:-}" = "1" ] && printf 'scope: %s\n' "$1" >&2; return 0; }
+
+# Every `cd <dir>` target anywhere in the command — not just a leading one.
+# `cd /other && true; cd /gsd-core && git push` must surface BOTH targets, or
+# the second `cd` (the one actually in effect at the push) would be invisible.
+# Quotes stripped; a leading `~` expanded to $HOME.
+all_cd_targets() {
+  local seg d
+  while IFS= read -r seg || [ -n "$seg" ]; do
+    seg="$(printf '%s' "$seg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    [ -z "$seg" ] && continue
+    printf '%s' "$seg" | grep -Eq '^cd([[:space:]]|$)' || continue
+    d="$(printf '%s' "$seg" | sed -E 's/^cd[[:space:]]*//' | sed -E 's/[[:space:]].*$//')"
+    d="$(printf '%s' "$d" | sed -E "s/^['\"]//; s/['\"]\$//")"
+    case "$d" in
+      '~') d="$HOME" ;;
+      '~/'*) d="$HOME/${d#\~/}" ;;
+    esac
+    [ -n "$d" ] && printf '%s\n' "$d"
+  done < <(printf '%s' "$cmd" | sed -E 's/&&/\n/g; s/\|\|/\n/g' | tr ';|\n' '\n')
+}
+
+# Every `git -C <dir>` target anywhere in the command (there may be several
+# git invocations, each targeting a different repo).
+all_dash_c_targets() {
+  printf '%s' "$cmd" | grep -oE 'git[[:space:]]+-C[[:space:]]+[^[:space:]]+' \
+    | sed -E 's/^git[[:space:]]+-C[[:space:]]+//; s/^["'"'"']//; s/["'"'"']$//' || true
+}
+
+# TRUE only when THIS command's push is PROVEN to target another repo:
+#   (a) at least one cd/-C target is present,
+#   (b) EVERY cd target and EVERY -C target names another repo, AND
+#   (c) either the command's first segment is `cd <dir>` (so no later cd can
+#       re-target the shell before the push runs), or every `git … push`
+#       segment carries its OWN `-C <dir>` (so it does not depend on cwd at
+#       all). Otherwise: fall through and gate. This closes
+#       `cd /other && true; cd /gsd-core && git push` — the FIRST-segment
+#       check alone would have missed that the second `cd` un-does the first.
+push_is_other() {
+  local cds dcs c any=0 first_seg seg
+  cds="$(all_cd_targets)"; dcs="$(all_dash_c_targets)"
+  { [ -n "$cds" ] || [ -n "$dcs" ]; } || return 1
+  if [ -n "$cds" ]; then
+    while IFS= read -r c; do
+      [ -n "$c" ] || continue
+      any=1
+      dir_is_other_repo "$c" || return 1
+    done <<< "$cds"
+  fi
+  if [ -n "$dcs" ]; then
+    while IFS= read -r c; do
+      [ -n "$c" ] || continue
+      any=1
+      dir_is_other_repo "$c" || return 1
+    done <<< "$dcs"
+  fi
+  [ "$any" = "1" ] || return 1
+  first_seg="$(printf '%s' "$cmd" | sed -E 's/^[[:space:]]+//' | sed -E 's/(&&|\|\||;|\|).*$//' | sed -E 's/[[:space:]]+$//')"
+  printf '%s' "$first_seg" | grep -Eq '^cd([[:space:]]|$)' && return 0
+  while IFS= read -r seg || [ -n "$seg" ]; do
+    seg="$(printf '%s' "$seg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    [ -z "$seg" ] && continue
+    seg="$(printf '%s' "$seg" | sed -E 's/^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)+//')"
+    if printf '%s' "$seg" | grep -Eq '^git([[:space:]]+(-C[[:space:]]+[^[:space:]]+|-c[[:space:]]+[^[:space:]]+|--[^[:space:]=]+(=[^[:space:]]+)?|-[A-Za-z]+))*[[:space:]]+push([[:space:]]|$)'; then
+      printf '%s' "$seg" | grep -Eq '(^|[[:space:]])-C[[:space:]]' || return 1
+    fi
+  done < <(printf '%s' "$cmd" | sed -E 's/&&/\n/g; s/\|\|/\n/g' | tr ';|\n' '\n')
+  return 0
+}
+
+# gh has no `-C`; an explicit --repo/-R decides alone (even if cwd is
+# elsewhere — `--repo open-gsd/gsd-core` must NOT be skipped just because cwd
+# is another repo). Otherwise, same closure as push_is_other keyed on the
+# first-segment `cd` rule (there is no per-segment `-C` equivalent for gh).
+pr_is_other() {
+  if [ -n "$(gh_repo_flag)" ]; then
+    gh_repo_is_other
+    return $?
+  fi
+  local cds c any=0 first_seg
+  cds="$(all_cd_targets)"
+  [ -n "$cds" ] || return 1
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    any=1
+    dir_is_other_repo "$c" || return 1
+  done <<< "$cds"
+  [ "$any" = "1" ] || return 1
+  first_seg="$(printf '%s' "$cmd" | sed -E 's/^[[:space:]]+//' | sed -E 's/(&&|\|\||;|\|).*$//' | sed -E 's/[[:space:]]+$//')"
+  printf '%s' "$first_seg" | grep -Eq '^cd([[:space:]]|$)'
+}
+
 # 1) git push gate
 if is_git_push; then
-  if printf '%s' "$cmd" | grep -q 'GSD_HUMAN_OVERRIDE=1'; then
-    mkdir -p "$repo_root/.gsd"
-    printf '%s  HUMAN_OVERRIDE push: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$cmd" >> "$repo_root/.gsd/override.log"
-    exit 0
-  fi
-  if head_changes_are_doc_only; then exit 0; fi
-  if verdict_ok; then exit 0; fi
-  ship="$(shipped_sha)"
-  deny "PUSH BLOCKED — no passing gsd-test verdict for the sha being pushed (${ship:0:9}).
+  if ! push_is_other; then
+    scope_debug gate
+    if printf '%s' "$cmd" | grep -q 'GSD_HUMAN_OVERRIDE=1'; then
+      mkdir -p "$repo_root/.gsd"
+      printf '%s  HUMAN_OVERRIDE push: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$cmd" >> "$repo_root/.gsd/override.log"
+      exit 0
+    fi
+    if head_changes_are_doc_only; then exit 0; fi
+    if verdict_ok; then exit 0; fi
+    ship="$(shipped_sha)"
+    deny "PUSH BLOCKED — no passing gsd-test verdict for the sha being pushed (${ship:0:9}).
 gsd-test MUST report outcome:\"passed\" on THAT commit before any git push (CLAUDE.md, ABSOLUTE). Machine-enforced: this cannot be cleared by reasoning, by intent, or by claiming the tests are unrelated/flaky/expected.
 Record it (no foreground needed — any agent, any worktree; run from inside the target worktree):
   node ${GSD_VERIFY_WRAPPER:-.claude/hooks/gsd-verify-and-record.cjs} --base next --head <40-hex-sha> [--bench <name>]
 It runs the real gsd-test and, ONLY on outcome:\"passed\", records the pass for that exact sha — then the push unblocks. (Foreground \`gsd-test run\` also works, via the legacy recorder.)
 If outcome is failed / reaped / infra_error: HALT and fix or surface it. Do not push.
 (Human-only escape, never for the agent: re-issue prefixed with GSD_HUMAN_OVERRIDE=1 — it is logged.)"
+  else
+    scope_debug skip
+  fi
 fi
 
 # 2) PR create/ready/merge gate, plus SUBSTANTIVE `gh pr edit` only.
@@ -230,8 +369,41 @@ third_party_pr() {
   [ "$author" != "$viewer" ]
 }
 
+# DOC-ONLY EXEMPTION (both arms). CLAUDE.md: doc-only diffs are exempt from the
+# verdict arm AND the review arm - there is no code for /code-review or
+# /security-review to read. This covers .out-of-scope/ knowledge-base PRs that
+# /triage-review opens and merges unattended (#5061). A command that names a PR
+# number is classified by THAT PR's server-side file list (the session HEAD may
+# be an unrelated branch); otherwise by HEAD vs the integration branch.
+# Fail-closed: no number / gh failure / truncated list (>100 files) -> full gate.
+named_pr_doc_only() {
+  local n files total count line
+  n="$(printf '%s' "$cmd" | grep -oE 'gh[[:space:]]+pr[[:space:]]+(merge|edit|ready)[[:space:]]+[0-9]+' | head -n1 | grep -oE '[0-9]+$' || true)"
+  [ -n "$n" ] || return 1
+  files="$(gh_bounded pr view "$n" --json files --jq '.files[].path' 2>/dev/null || true)"
+  total="$(gh_bounded pr view "$n" --json changedFiles --jq '.changedFiles' 2>/dev/null || true)"
+  [ -n "$files" ] && [ -n "$total" ] || return 1
+  count="$(printf '%s\n' "$files" | grep -c .)"
+  [ "$count" = "$total" ] || return 1
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    is_doc_only_path "$line" || return 1
+  done <<< "$files"
+  return 0
+}
+pr_is_doc_only() {
+  if printf '%s' "$cmd" | grep -Eq 'gh[[:space:]]+pr[[:space:]]+(merge|edit|ready)[[:space:]]+[0-9]+'; then
+    named_pr_doc_only
+  else
+    head_changes_are_doc_only
+  fi
+}
+
 if pr_gated; then
+  if pr_is_other; then scope_debug skip; exit 0; fi
+  scope_debug gate
   if third_party_pr; then exit 0; fi
+  if pr_is_doc_only; then exit 0; fi
   if ! head_changes_are_doc_only && ! verdict_ok; then
     ship="$(shipped_sha)"
     deny "PR BLOCKED — no passing gsd-test verdict for the sha being shipped (${ship:0:9}). Record it first from inside the target worktree: node ${GSD_VERIFY_WRAPPER:-.claude/hooks/gsd-verify-and-record.cjs} --base next --head <40-hex-sha> (machine-enforced; CLAUDE.md ABSOLUTE). Doc/changeset-only PRs are exempt — if you intended a docs-only PR, ensure every changed file is under .changeset/, docs/, .github templates, or a root-level *.md."
