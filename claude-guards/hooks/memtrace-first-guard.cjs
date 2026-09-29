@@ -1,5 +1,17 @@
 #!/usr/bin/env node
-// gsd-hook-version: 1.5.1
+// gsd-hook-version: 1.6.1
+//
+// 1.6.0 (2026-09-29, maintainer-instructed hardening; guards get STRICTER only):
+//   HOLE C (measured 2026-09-29): every file under
+//   `<repo>/.claude/worktrees/<wt>/...` read as "not indexed", because
+//   isNotIndexedPath() tested every segment of the ABSOLUTE path and `.claude`
+//   is in NOT_INDEXED_DIRS; isPlausiblyIndexed() only knew the CWD's toplevel,
+//   so a file in a sibling worktree was "not plausibly indexed"; and the Read
+//   carve-out allowed ANY Read once a memtrace call mentioned the BASENAME.
+//   Fix: NOT_INDEXED_DIRS is tested against the repo-RELATIVE path; any worktree
+//   of the same repo (same git common dir) is plausibly indexed; the Read
+//   carve-out now requires an offset/limit span fully inside a span that a prior
+//   get_source_window call returned for that exact file.
 //
 // 1.5.1 (2026-09-10, THIRD-party verification of the 1.5.0 rewrite and of the
 //   audit that reviewed it). Closes four measured DENY->ALLOW defects that
@@ -360,6 +372,48 @@ function isCloneOfCurrentRepo(absPath, toplevel) {
   return !!(a && b && a === b);
 }
 
+// 1.6.0 HOLE C (measured 2026-09-29): see file header. The helpers below
+// let the guard reason about a path RELATIVE to the repo that contains it,
+// and recognise sibling worktrees of the current repo.
+const _topCache = new Map();
+function toplevelContaining(absPath) {
+  const dir = dirForGit(absPath);
+  if (_topCache.has(dir)) return _topCache.get(dir);
+  const top = getRepoToplevel(dir);
+  _topCache.set(dir, top);
+  return top;
+}
+
+const _commonCache = new Map();
+function gitCommonDirOf(dir) {
+  if (_commonCache.has(dir)) return _commonCache.get(dir);
+  let common = null;
+  try {
+    const out = execFileSync(
+      'git',
+      ['-C', dir, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+      { timeout: 5000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+    ).trim();
+    if (out) {
+      try { common = fs.realpathSync(out); } catch { common = path.normalize(out); }
+    }
+  } catch {
+    common = null;
+  }
+  _commonCache.set(dir, common);
+  return common;
+}
+
+// Segments of `absPath` relative to the repo toplevel containing it; null when
+// the path is not in a repo or escapes it.
+function repoRelativeSegments(absPath) {
+  const top = toplevelContaining(absPath);
+  if (!top) return null;
+  const rel = path.relative(top, absPath);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  return normalizeSlashes(rel).split('/').filter(Boolean);
+}
+
 // FP1: a path operand only counts as "targeting an indexed repo" when it
 // resolves inside the CURRENT git toplevel and is not under any OS temp
 // dir. Throwaway `mktemp -d` fixtures are indexed by nothing, no matter
@@ -372,7 +426,13 @@ function isPlausiblyIndexed(pathLike, cwd, toplevel) {
   if (isUnderTempDir(abs)) return isCloneOfCurrentRepo(abs, toplevel);
   const normAbs = normalizeSlashes(abs);
   const normTop = normalizeSlashes(toplevel).replace(/\/+$/, '');
-  return normAbs === normTop || normAbs.startsWith(`${normTop}/`);
+  if (normAbs === normTop || normAbs.startsWith(`${normTop}/`)) return true;
+  // 1.6.0: another worktree of the same repo shares the git common dir.
+  const fileTop = toplevelContaining(abs);
+  if (!fileTop) return false;
+  const a = gitCommonDirOf(fileTop);
+  const b = gitCommonDirOf(toplevel);
+  return !!(a && b && a === b);
 }
 
 // FP3: `node scripts/gen-adr-index.cjs --write` is a generator EXECUTION,
@@ -408,7 +468,15 @@ function hasSourceExt(p) {
   return SOURCE_EXT_SET.has(extOf(p));
 }
 
-function isNotIndexedPath(p) {
+function isNotIndexedPath(p, cwd) {
+  if (cwd) {
+    const abs = resolveAbsolute(cwd, p);
+    if (abs) {
+      if (isUnderNeverIndexedRoot(abs)) return true;
+      const segs = repoRelativeSegments(abs);
+      if (segs) return segs.some((seg) => NOT_INDEXED_DIRS.has(seg));
+    }
+  }
   const norm = normalizeSlashes(p).replace(/^\.\//, '');
   const segments = norm.split('/').filter(Boolean);
   return segments.some((seg) => NOT_INDEXED_DIRS.has(seg));
@@ -480,7 +548,7 @@ function checkGrepGlob(input, cwd, toplevel, tool) {
     : (tool === 'Glob' && typeof input.pattern === 'string' ? input.pattern : '');
   const typeVal = typeof input.type === 'string' ? input.type : '';
 
-  if (pathVal && isNotIndexedPath(pathVal)) return null; // Memtrace structurally can't serve it
+  if (pathVal && isNotIndexedPath(pathVal, cwd)) return null; // Memtrace structurally can't serve it
 
   // FP1: not resolvable to somewhere inside the current repo's git
   // toplevel (or resolves under an OS temp dir) -> not indexed, don't fire.
@@ -503,57 +571,65 @@ function checkGrepGlob(input, cwd, toplevel, tool) {
 function checkRead(input, cwd, toplevel) {
   const fp = typeof input.file_path === 'string' ? input.file_path : '';
   if (!fp) return null;
-  if (isNotIndexedPath(fp)) return null;
+  if (isNotIndexedPath(fp, cwd)) return null;
   if (!hasSourceExt(fp)) return null;
   if (!isPlausiblyIndexed(fp, cwd, toplevel)) return null;
   return `target path "${fp}" is an indexed source file`;
 }
 
-// The denial text advertises "re-reading a span Memtrace already returned"
-// as exempt, but until now nothing in this file actually checked that --
-// checkRead/checkBash were pure structural checks with no transcript
-// awareness. This closes that gap: if a mcp__memtrace__* tool call appears
-// anywhere in the transcript whose recorded tool_use input OR tool_result
-// content references the same basename as the file being read, the guard
-// treats Memtrace as already consulted for this file and allows the
-// Read/Bash through. Fails closed toward "not found" (i.e. still deny) on
-// any read/parse error, matching this file's fail-open-on-infra-error
-// posture applied narrowly (a transcript read failure here just means this
-// specific carve-out doesn't apply -- the original structural denial still
-// fires, which is the safe default).
-function wasMemtraceConsultedForPath(transcriptPath, absPath) {
-  if (!transcriptPath || !absPath) return false;
-  const needle = baseNameOf(absPath).toLowerCase();
-  if (!needle) return false;
-  let lines;
+// 1.6.0: span-exact Read carve-out. A Read of indexed source is allowed only
+// when it carries a numeric offset AND limit and that span lies fully inside a
+// span that a prior mcp__memtrace__get_source_window call returned for this
+// exact file (resolved_path + start_line/end_line). Any read/parse error means
+// "not covered" (the structural denial stands).
+function memtraceSpanCovers(transcriptPath, absPath, offset, limit) {
   try {
-    lines = fs.readFileSync(transcriptPath, 'utf8').split('\n');
-  } catch {
-    return false;
-  }
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    const line = lines[i];
-    if (!line || !line.includes('mcp__memtrace__')) continue;
-    let d;
-    try {
-      d = JSON.parse(line);
-    } catch {
-      continue;
+    if (!transcriptPath || !absPath) return false;
+    if (!(Number.isInteger(offset) && offset >= 1 && Number.isInteger(limit) && limit >= 1)) return false;
+    const MAX = 8 * 1024 * 1024;
+    const size = fs.statSync(transcriptPath).size;
+    let text;
+    if (size > MAX) {
+      const fd = fs.openSync(transcriptPath, 'r');
+      try {
+        const buf = Buffer.alloc(MAX);
+        fs.readSync(fd, buf, 0, MAX, size - MAX);
+        text = buf.toString('utf8');
+      } finally { fs.closeSync(fd); }
+      const nl = text.indexOf('\n');
+      text = nl >= 0 ? text.slice(nl + 1) : '';
+    } else {
+      text = fs.readFileSync(transcriptPath, 'utf8');
     }
-    const content = d && d.message && d.message.content;
-    if (!Array.isArray(content)) continue;
-    for (const block of content) {
-      if (!block || typeof block !== 'object') continue;
-      if (block.type === 'tool_use' && String(block.name || '').startsWith('mcp__memtrace__')) {
-        const inputStr = JSON.stringify(block.input || {}).toLowerCase();
-        if (inputStr.includes(needle)) return true;
-      }
-      if (block.type === 'tool_result') {
-        const resultStr = JSON.stringify(block.content || '').toLowerCase();
-        if (resultStr.includes(needle)) return true;
+    const real = (p) => { try { return fs.realpathSync(p); } catch { return path.normalize(p); } };
+    const target = real(absPath);
+    const lines = text.split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } });
+    const ids = new Set();
+    for (const d of lines) {
+      const c = d && d.message && d.message.content;
+      if (!Array.isArray(c)) continue;
+      for (const b of c) {
+        if (b && b.type === 'tool_use' && b.name === 'mcp__memtrace__get_source_window' && b.id) ids.add(b.id);
       }
     }
-  }
+    if (!ids.size) return false;
+    const end = offset + limit - 1;
+    for (const d of lines) {
+      const c = d && d.message && d.message.content;
+      if (!Array.isArray(c)) continue;
+      for (const b of c) {
+        if (!b || b.type !== 'tool_result' || !ids.has(b.tool_use_id) || !Array.isArray(b.content)) continue;
+        for (const t of b.content) {
+          if (!t || t.type !== 'text' || typeof t.text !== 'string' || !t.text.startsWith('{')) continue;
+          let o;
+          try { o = JSON.parse(t.text); } catch { continue; }
+          if (!o || typeof o.resolved_path !== 'string') continue;
+          if (!Number.isInteger(o.start_line) || !Number.isInteger(o.end_line)) continue;
+          if (real(o.resolved_path) === target && o.start_line <= offset && end <= o.end_line) return true;
+        }
+      }
+    }
+  } catch { /* fall through */ }
   return false;
 }
 
@@ -893,7 +969,7 @@ function checkBash(command, cwd, toplevel) {
   for (const op of extractPathOperands(command)) {
     if (!op) continue;
     if (!hasSourceExtOrSourceGlob(op)) continue;
-    if (isNotIndexedPath(op)) continue;
+    if (isNotIndexedPath(op, cwd)) continue;
     // A non-glob operand that resolves to nothing cannot be an indexed source
     // file. extractPathOperands() STRIPS a leading `cd` rather than resolving
     // against it, so `cd <dir> && sed -n ... <basename>` resolved the basename
@@ -1109,6 +1185,8 @@ function denyOutput(reasonFragment, toolLabel) {
     'those is not proof of absence; re-ask find_code({repo_id, query, worktree}). ' +
     'NOT blocked: prose/config .md/.json/.yml/.toml, file-inventory counts, anything under ' +
     'bin/ or other non-indexed dirs, and re-reading a span Memtrace already returned. ' +
+    'Read on indexed source is allowed only for an offset/limit span that a prior ' +
+    'mcp__memtrace__get_source_window call returned for this exact file (resolved_path + line range). ' +
     'Human escape: GSD_MEMTRACE_GUARD_OFF=1 must be exported in the shell that launches ' +
     'Claude Code. An inline command prefix does NOT work and is not self-issuable - this ' +
     'hook runs as its own process, so the pending command text is not in its environment.';
@@ -1152,7 +1230,17 @@ async function main() {
       const fp = typeof input.file_path === 'string' ? input.file_path : '';
       const abs = resolveAbsolute(cwd, fp);
       const transcriptPath = typeof payload.transcript_path === 'string' ? payload.transcript_path : '';
-      if (abs && wasMemtraceConsultedForPath(transcriptPath, abs)) reason = null;
+      if (abs && memtraceSpanCovers(transcriptPath, abs, input.offset, input.limit)) reason = null;
+      // 1.6.1: a SUBAGENT's hook payload carries the PARENT session's
+      // transcript_path; the subagent's own get_source_window calls live in
+      // <session>/subagents/agent-<agent_id>.jsonl. Only when the parent check
+      // above fails, also consult exactly that one file (payload.agent_id is
+      // present for subagent calls). Same proof rules via memtraceSpanCovers.
+      if (reason && abs && transcriptPath && typeof payload.agent_id === 'string' && /^[A-Za-z0-9_-]+$/.test(payload.agent_id)) {
+        const sessionDir = path.join(path.dirname(transcriptPath), path.basename(transcriptPath, '.jsonl'));
+        const agentTranscript = path.join(sessionDir, 'subagents', 'agent-' + payload.agent_id + '.jsonl');
+        if (memtraceSpanCovers(agentTranscript, abs, input.offset, input.limit)) reason = null;
+      }
     }
   } else {
     reason = checkBash(input.command, cwd, toplevel);
