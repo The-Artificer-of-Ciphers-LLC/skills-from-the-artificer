@@ -499,6 +499,14 @@ edge cases and handles the two closure kinds that are deliberately batched.*
     finished, or a required check is `pending`/never triggered). CLAUDE.md's MERGE CONSTRAINTS
     reserve `--admin` narrowly for a *documented* missing-secondary-reviewer case; treat any use of
     it here as a signal you've misdiagnosed the block, not a routine unblocking move.
+    **`--admin` is not a scoped bypass** — with `enforce_admins=false` it also skips the strict
+    up-to-date rule and every required check, which is how admin merges past a red `Required tests`
+    and 24 merges while BEHIND `next` landed (audit 2026-09-25). In this directive the answer is
+    always a plain `gh pr merge`, and only after verifying on the current head: newest run of every
+    check green with none pending, every required context reported, `behind_by == 0` against the
+    base (compare API — `mergeStateStatus` hides BEHIND behind BLOCKED), `mergeable == MERGEABLE`.
+    Raw API merges (`gh api .../pulls/N/merge`, GraphQL `mergePullRequest`) are forbidden.
+    `gsd-merge-authority-guard.cjs` enforces this live; a denial from it is final.
 
 2. **Closures.** Collect every PR recommended for closure during Phase B: stale (§1.8) and
    competing-PR losers (§7). If `AUTONOMOUS` = `false`, present this list for a single confirmation

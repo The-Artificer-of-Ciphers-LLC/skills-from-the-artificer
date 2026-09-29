@@ -924,7 +924,12 @@ sweep that fans out across worktrees, hand the binding to one agent at a time.
 3. **A failure that does not reproduce is not a flake.** Root-cause the mechanism, or set the issue
    to `needs-decision` with the evidence. Never re-run it away.
 4. **Resolve merge-state problems yourself.** An out-of-date branch → update from `$BASE_BRANCH` and
-   re-verify. A *behind* base is not a blocker, it is a task.
+   re-verify. A *behind* base is not a blocker, it is a task — but it is **never** an `--admin`
+   case. Measure it with the compare API (`gh api repos/$REPO/compare/$BASE_BRANCH...<head-sha>
+   --jq .behind_by`); `mergeStateStatus` reports `BLOCKED`, not `BEHIND`, whenever the review is
+   also missing, so it cannot be trusted for this. Refresh once (`gh pr update-branch`), wait for
+   green on the new head; if `next` has moved again, park the PR as green-and-waiting for the
+   maintainer instead of looping, and never merge it BEHIND.
 
 5. 📄 **WRITE `.gsd/bug/<branch-slug>/80-ship.json`.** **`gh pr merge` is denied until this file
    exists, and its contents are checked — not merely its presence.**
@@ -970,6 +975,14 @@ sweep that fans out across worktrees, hand the binding to one agent at a time.
 6. **Merge.** When CI is green and the branch is mergeable, merge it. If the **only** thing blocking
    is the self-review / missing-secondary-reviewer requirement, use admin merge — that is precisely
    and only what admin merge is for.
+   **`--admin` is not a scoped bypass**: with `enforce_admins=false` it also skips the strict
+   up-to-date rule and every required check. So "only thing blocking" must be *verified live at
+   merge time* on the current head, not recalled from `80-ship.json`: newest run of every check
+   (per workflow+name) green with none pending, every required context reported, `behind_by == 0`,
+   `mergeable == MERGEABLE`, and `reviewDecision == REVIEW_REQUIRED`. Raw API merges are forbidden.
+   `gsd-merge-authority-guard.cjs` enforces exactly this against GitHub; a denial from it is final.
+   *(Audit 2026-09-25: admin merges past a red `Required tests` (#4971, #4737), before any check
+   started (#4646), and 24 merges while BEHIND `next`.)*
 7. **Confirm the linked issue closed** (the `Fixes #NNN` link should auto-close it via GitHub's own
    merge automation). If it did not, **do not close or comment on it yourself** — that is a GitHub
    issue write outside the PR flow (`<guardrails>` → Never write to a GitHub issue). Note the

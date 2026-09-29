@@ -1291,6 +1291,22 @@ single-PR path beyond the normal merge.*
 > confirmation point regardless. **Admin merge may bypass a missing secondary reviewer ONLY —
 > never a CI failure or a merge conflict.** If a merge is blocked, **surface it for the human to
 > run**; do not route around the gate.
+>
+> **`--admin` is not a scoped bypass.** With `enforce_admins=false` it skips *every* protection at
+> once — reviews, the strict up-to-date rule, and required checks — so "admin only for the
+> reviewer" holds only if everything else is verified **live, at merge time**, first. Before any
+> `gh pr merge` (with or without `--admin`), all of these must hold on the PR's **current head**:
+> newest run of every check (per workflow+name) is `SUCCESS`/`SKIPPED`/`NEUTRAL`, none pending,
+> every required context reported; `behind_by == 0` against the base
+> (`gh api repos/OWNER/REPO/compare/BASE...HEAD_SHA --jq .behind_by` — `mergeStateStatus` shows
+> `BLOCKED`, not `BEHIND`, whenever a review is also missing); `mergeable == MERGEABLE`; not a
+> draft. `--admin` is then permitted only when `reviewDecision == REVIEW_REQUIRED`. BEHIND is a
+> CI condition, never a reviewer one: refresh once (`gh pr update-branch`), wait for green, and if
+> `next` has moved again, hand the green PR to the maintainer — never `--admin` past it. Raw API
+> merges (`gh api .../pulls/N/merge`, GraphQL `mergePullRequest`) are forbidden.
+> `gsd-merge-authority-guard.cjs` enforces exactly this; a denial from it is final.
+> *(Audit 2026-09-25: admin merges into `next` past a red `Required tests` (#4971, #4737), before
+> any check started (#4646), and 24 merges while BEHIND — the rule existed only as this prose.)*
 </step>
 
 </process>
