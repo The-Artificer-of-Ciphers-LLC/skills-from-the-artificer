@@ -2,7 +2,7 @@
 
 > A rule an agent can read once and forget is not enforced.
 
-The `.claude/hooks/` suite from one real project, copied as-is. Fourteen scripts, each written to
+The `.claude/hooks/` suite from one real project, copied as-is. Fifteen scripts, each written to
 close one specific incident (named, dated, in its own header comment) rather than designed
 speculatively. Full rationale: [`SKILL.md`](SKILL.md).
 
@@ -24,6 +24,7 @@ gsd-core-hooks/
     ├── gsd-test-single-flight-guard.sh PreToolUse(Bash)     — denies a second gsd-test/verify-and-record dispatch while this worktree has one in flight
     ├── gsd-async-poll-guard.sh        PreToolUse(Bash)      — denies dispatching a long remote run through the tool harness's own background/timeout knobs (they silently kill at ~600s with no verdict)
     ├── gsd-bench-pin-guard.sh         PreToolUse(Bash)      — denies a gsd-test/verify-and-record dispatch that omits an explicit bench pin (unpinned runs pile onto one shared box)
+    ├── gsd-test-viability-guard.sh    PreToolUse(Bash)      — denies a dispatch the runner cannot actually execute (no local docker client, legacy pre-Go gsd-test on PATH, missing config.toml, bench absent from config, bench daemon unreachable). Every sibling enforces the FORM of a dispatch; this one enforces that it can RUN
     ├── gsd-foreground-poll-guard.sh   PreToolUse(Bash)      — denies a foreground `while`/`until` poll loop with a long sleep (dies at the harness ceiling, indistinguishable from the watched job failing)
     ├── gsd-pgrep-waiter-guard.sh      PreToolUse(Bash\|Monitor) — denies a `pgrep -f "<cmd>"` wait-loop whose own argv matches its search pattern (never terminates)
     ├── block-local-node-test.sh       PreToolUse(Bash)      — hard-denies local `node --test` / `npm test` (orphans the workstation; route through the remote runner)

@@ -13,7 +13,34 @@ set -uo pipefail
 cd "$(dirname "$0")" || exit 1
 GUARD="$(pwd)/memtrace-first-guard.cjs"
 
-REAL_REPO=/Users/trekkie/projects/gsd-core
+# Self-contained "repo under test": a throwaway git repo (with a remote so the
+# guard's temp-dir clone rule treats it as the current repo) holding every
+# file the cases name. The guard only denies operands that EXIST on disk, so
+# the fixture must actually contain them. Nothing here touches another project.
+REAL_REPO=$(mktemp -d)
+FIXHOME=$(mktemp -d)
+FIX_FILES=(src/cli-exit.cts src/foo.cts src/io.cts src/Ledger.swift Sources/App/Ledger.swift scripts/ci-timeout-report.cjs scripts/gen-adr-index.cjs tests/some-file.test.cjs)
+for f in "${FIX_FILES[@]}"; do
+  mkdir -p "$REAL_REPO/$(dirname "$f")"
+  printf '// fixture %s\nline\n' "$f" > "$REAL_REPO/$f"
+done
+printf '# Readme\n' > "$REAL_REPO/README.md"
+printf '# Context\n' > "$REAL_REPO/CONTEXT.md"
+printf '{"name":"fixture"}\n' > "$REAL_REPO/package.json"
+git -C "$REAL_REPO" init -q 2>/dev/null
+git -C "$REAL_REPO" remote add origin https://example.invalid/guard-fixture.git 2>/dev/null
+git -C "$REAL_REPO" add -A 2>/dev/null
+git -C "$REAL_REPO" -c user.name=fixture -c user.email=fixture@example.invalid commit -q -m fixture 2>/dev/null
+# Real sibling worktrees of the fixture (1.6.0 cases).
+WT_A="$REAL_REPO/.claude/worktrees/ci-timeout-rolling-pr"
+WT_B="$REAL_REPO/.claude/worktrees/feature-builder-issue-5073-5d20cb"
+git -C "$REAL_REPO" worktree add -q -b wt-a "$WT_A" 2>/dev/null
+git -C "$REAL_REPO" worktree add -q -b wt-b "$WT_B" 2>/dev/null
+# Fake HOME holding a never-indexed ~/.claude/hooks file.
+mkdir -p "$FIXHOME/.claude/hooks"
+printf '// fixture\n' > "$FIXHOME/.claude/hooks/tier-guard.cjs"
+FIX_SETUP_OK=1
+[ -d "$WT_A/scripts" ] && [ -d "$WT_B/scripts" ] && [ -n "$(git -C "$REAL_REPO" rev-parse --verify -q HEAD)" ] || FIX_SETUP_OK=0
 
 N=0
 F=0
@@ -82,7 +109,7 @@ printf 'export const y = 2;\n' > "$TMPCLONE/src/thing.cts"
 git -C "$TMPCLONE" init -q 2>/dev/null
 [ -n "$REAL_ORIGIN" ] && git -C "$TMPCLONE" remote add origin "$REAL_ORIGIN" 2>/dev/null
 
-trap 'rm -rf "$TMPFIXTURE" "$TMPCLONE"' EXIT
+trap 'git -C "$REAL_REPO" worktree prune 2>/dev/null; rm -rf "$TMPFIXTURE" "$TMPCLONE" "$REAL_REPO" "$FIXHOME" "${SWIFT_REPO:-}" "${SUB_ROOT:-}" "${SPAN_T:-}"' EXIT
 
 echo "=== MUST ALLOW (false positives) ==="
 
@@ -428,7 +455,6 @@ printf 'struct Ledger { let amount: Decimal }\n' > "$SWIFT_REPO/Sources/App/Ledg
 printf '# Notes\nsee Sources/App/Ledger.swift\n'  > "$SWIFT_REPO/NOTES.md"
 git -C "$SWIFT_REPO" init -q 2>/dev/null
 git -C "$SWIFT_REPO" remote add origin https://example.invalid/swift-fixture.git 2>/dev/null
-trap 'rm -rf "$TMPFIXTURE" "$TMPCLONE" "$SWIFT_REPO"' EXIT
 
 echo "=== 1.5.1 Swift fixture canary ==="
 # If this canary fails, the fixture is no longer visible to the guard and
@@ -553,6 +579,100 @@ check "KNOWN GAP (swift): Grep output_mode=content over a source dir is ALLOWED"
 
 runtool '{"pattern":"someSymbol","path":"Sources","output_mode":"files_with_matches"}' Grep "$SWIFT_REPO"
 check "KNOWN GAP (swift): Grep output_mode=files_with_matches over a source dir is ALLOWED" "$ALLOW_CHECK"
+
+echo "=== 1.6.0 HOLE C: worktree exemption + span-exact Read carve-out ==="
+# WT_A / WT_B are real `git worktree add` worktrees of the fixture (see top).
+[ "$FIX_SETUP_OK" = 1 ] || fail "fixture setup: worktrees/HEAD" "git worktree add failed"
+WT_FILE="$WT_A/scripts/ci-timeout-report.cjs"
+
+runtool "{\"file_path\":\"$WT_FILE\"}" Read "$WT_A"
+check "1.6.0: Read absolute path in a gsd-core worktree (same worktree cwd) -> deny" "$DENY_CHECK"
+
+runtool "{\"file_path\":\"$WT_FILE\"}" Read "$WT_B"
+check "1.6.0: Read that worktree file from a DIFFERENT worktree cwd -> deny" "$DENY_CHECK"
+
+runtool "{\"file_path\":\"$WT_FILE\"}" Read "$REAL_REPO"
+check "1.6.0: Read that worktree file from the main checkout cwd -> deny" "$DENY_CHECK"
+
+OUT=$(unset GSD_MEMTRACE_GUARD_OFF; python3 -c 'import json,sys;print(json.dumps({"tool_name":"Read","tool_input":{"file_path":sys.argv[1]},"cwd":sys.argv[2]}))' "$FIXHOME/.claude/hooks/tier-guard.cjs" "$REAL_REPO" | HOME="$FIXHOME" GSD_MEMTRACE_GUARD_LOG=0 node "$GUARD" 2>/dev/null); RC=$?
+check "1.6.0: Read ~/.claude/hooks/*.cjs (never-indexed root) -> allow" "$ALLOW_CHECK"
+
+runtool "{\"file_path\":\"$REAL_REPO/CONTEXT.md\"}" Read "$REAL_REPO"
+check "1.6.0: Read CONTEXT.md (non-source file in repo) -> allow" "$ALLOW_CHECK"
+
+SPAN_T=$(mktemp)
+python3 - "$SPAN_T" "$WT_FILE" <<'PY'
+import json,sys
+out,f=sys.argv[1],sys.argv[2]
+a={"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__memtrace__get_source_window","input":{"file_path":"scripts/ci-timeout-report.cjs"}}]}}
+u={"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"**get_source_window**"},{"type":"text","text":json.dumps({"resolved_path":f,"start_line":100,"end_line":150})}]}]}}
+open(out,"w").write(json.dumps(a)+"\n"+json.dumps(u)+"\n")
+PY
+spanread() { # spanread <extra-json-fields> <file> [transcript]
+  local extra="$1" file="$2" tr="${3:-$SPAN_T}"
+  run "$(python3 -c 'import json,sys;d={"tool_name":"Read","tool_input":dict({"file_path":sys.argv[2]},**json.loads(sys.argv[1])),"cwd":sys.argv[4],"transcript_path":sys.argv[3]};print(json.dumps(d))' "$extra" "$file" "$tr" "$WT_A")"
+}
+spanread '{"offset":100,"limit":51}' "$WT_FILE"
+check "1.6.0 SPAN: offset=start, end=end_line exactly -> allow" "$ALLOW_CHECK"
+spanread '{"offset":100,"limit":52}' "$WT_FILE"
+check "1.6.0 SPAN: end = end_line+1 -> deny" "$DENY_CHECK"
+spanread '{"offset":99,"limit":10}' "$WT_FILE"
+check "1.6.0 SPAN: offset = start-1 -> deny" "$DENY_CHECK"
+spanread '{"offset":120,"limit":5}' "$WT_FILE"
+check "1.6.0 SPAN: fully inside -> allow" "$ALLOW_CHECK"
+spanread '{}' "$WT_FILE"
+check "1.6.0 SPAN: no offset/limit even though transcript mentions the file -> deny" "$DENY_CHECK"
+spanread '{"offset":120}' "$WT_FILE"
+check "1.6.0 SPAN: offset without limit -> deny" "$DENY_CHECK"
+spanread '{"offset":120,"limit":5}' "$REAL_REPO/scripts/ci-timeout-report.cjs"
+check "1.6.0 SPAN: different file, same basename -> deny" "$DENY_CHECK"
+echo "=== 1.6.1: subagent transcript span carve-out (payload.agent_id) ==="
+SUB_ROOT=$(mktemp -d)
+SUB_S1="$SUB_ROOT/proj/sess-1111"; SUB_S2="$SUB_ROOT/proj/sess-2222"
+mkdir -p "$SUB_S1/subagents" "$SUB_S2/subagents"
+SUB_P1="$SUB_ROOT/proj/sess-1111.jsonl"
+mk_span() { # mk_span <out> <file> <start> <end>
+  python3 -c 'import json,sys
+out,f,s,e=sys.argv[1],sys.argv[2],int(sys.argv[3]),int(sys.argv[4])
+a={"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__memtrace__get_source_window","input":{"file_path":"x"}}]}}
+u={"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":json.dumps({"resolved_path":f,"start_line":s,"end_line":e})}]}]}}
+open(out,"w").write(json.dumps(a)+"\n"+json.dumps(u)+"\n")' "$1" "$2" "$3" "$4"
+}
+echo '{}' > "$SUB_P1"
+mk_span "$SUB_S1/subagents/agent-aaa.jsonl" "$WT_FILE" 100 150
+mk_span "$SUB_S1/subagents/agent-bbb.jsonl" "$WT_FILE" 300 350
+mk_span "$SUB_S2/subagents/agent-aaa.jsonl" "$WT_FILE" 100 150
+mk_span "$SUB_S1/subagents/agent-ccc.jsonl" "$REAL_REPO/scripts/ci-timeout-report.cjs" 100 150
+subread() { # subread <extra-json> <transcript> <agent_id|"">
+  run "$(python3 -c 'import json,sys
+d={"tool_name":"Read","tool_input":dict({"file_path":sys.argv[4]},**json.loads(sys.argv[1])),"cwd":sys.argv[5],"transcript_path":sys.argv[2]}
+if sys.argv[3]: d["agent_id"]=sys.argv[3]
+print(json.dumps(d))' "$1" "$2" "$3" "$WT_FILE" "$WT_A")"
+}
+subread '{"offset":120,"limit":5}' "$SPAN_T" ""
+check "1.6.1 (a) span in PARENT transcript, no agent_id -> allow" "$ALLOW_CHECK"
+subread '{"offset":120,"limit":5}' "$SPAN_T" "aaa"
+check "1.6.1 (a) span in PARENT transcript, with agent_id -> allow" "$ALLOW_CHECK"
+subread '{"offset":120,"limit":5}' "$SUB_P1" "aaa"
+check "1.6.1 (b) span only in calling subagent transcript -> allow" "$ALLOW_CHECK"
+subread '{"offset":140,"limit":20}' "$SUB_P1" "aaa"
+check "1.6.1 (c) subagent span does not cover range -> deny" "$DENY_CHECK"
+subread '{"offset":120,"limit":5}' "$SUB_P1" "ccc"
+check "1.6.1 (c) subagent span names a different file -> deny" "$DENY_CHECK"
+subread '{"offset":120,"limit":5}' "$SUB_ROOT/proj/sess-3333.jsonl" "aaa"
+check "1.6.1 (d) span only in a DIFFERENT session's subagent transcript -> deny" "$DENY_CHECK"
+subread '{"offset":120,"limit":5}' "$SUB_P1" "bbb"
+check "1.6.1 (e) span only in ANOTHER agent's transcript, same session -> deny" "$DENY_CHECK"
+subread '{"offset":120,"limit":5}' "$SUB_P1" ""
+check "1.6.1 no agent_id: sibling subagent transcripts are NOT scanned -> deny" "$DENY_CHECK"
+subread '{"offset":120,"limit":5}' "$SUB_P1" "../sess-2222/subagents/agent-aaa"
+check "1.6.1 path-traversal agent_id -> deny" "$DENY_CHECK"
+subread '{}' "$SUB_P1" "aaa"
+check "1.6.1 (f) subagent Read with no offset/limit -> deny" "$DENY_CHECK"
+subread '{"offset":120}' "$SUB_P1" "aaa"
+check "1.6.1 (f) subagent Read with offset but no limit -> deny" "$DENY_CHECK"
+rm -rf "$SUB_ROOT"
+rm -f "$SPAN_T"
 
 echo
 echo "memtrace-first-guard suite: $((N-F))/$N passed"
