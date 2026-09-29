@@ -163,9 +163,10 @@ function denyOutput(targetPath, note) {
     'sonnet-coder subagent (AGENT-TIER DISCIPLINE). Target: ' + targetPath + '. ' + note + ' ' +
     'Dispatch instead: Agent({ subagent_type: "sonnet-coder", model: "sonnet", prompt: ' +
     '"Edit <exact file>: <exact change>. Verify with: <exact command>." }) — state the exact ' +
-    'file, exact change, and verification command in the brief. ' +
+    'file, exact change, and verification command in the brief ' +
+    '(in gsd-core use subagent_type "general-purpose" with model "sonnet" — sonnet-coder has no Memtrace tools). ' +
     'Bypass: set GSD_TIER_GUARD=off for this call if the edit is genuinely architectural';
-  if (reason.length > 900) reason = reason.slice(0, 897) + '...';
+  if (reason.length > 1100) reason = reason.slice(0, 1097) + '...';
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',

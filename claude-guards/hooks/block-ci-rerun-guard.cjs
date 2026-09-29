@@ -37,7 +37,17 @@ process.stdin.on('end', () => {
     { re: /\bgit\s+commit\b[^\n]*--allow-empty\b/i, label: 'git commit --allow-empty (empty-commit CI retrigger)' },
   ];
 
-  const hit = PATTERNS.find((p) => p.re.test(cmd));
+  // A `gh workflow run release.yml` dispatch is the RELEASE PIPELINE, not a CI
+  // rerun: it cuts the release branch, publishes to npm, and mints the tag.
+  // There is no red check being papered over — no prior run of it exists to
+  // re-trigger. Re-running an already-dispatched release run still goes through
+  // `gh run rerun`, which stays blocked, as does every other workflow dispatch.
+  const RELEASE_DISPATCH_RE = /\bgh\s+workflow\s+run\b[^\n]*[\s"'/]release\.yml\b/i;
+  const isReleaseDispatch = RELEASE_DISPATCH_RE.test(cmd);
+
+  const hit = PATTERNS.find(
+    (p) => p.re.test(cmd) && !(isReleaseDispatch && p.label === 'gh workflow run'),
+  );
   if (!hit) {
     process.exit(0);
   }
