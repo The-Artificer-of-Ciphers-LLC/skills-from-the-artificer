@@ -73,6 +73,35 @@ function denyMissingModel(subagentType) {
   }));
 }
 
+// JOB C — an explicit `model: "opus"` on an inheriting type must carry a
+// justification. Job A only proves a model was chosen, not that the tier fits
+// the work (coding/editing/fixing/review belong on sonnet). The caller opts in
+// by putting OPUS_MARKER plus a reason in the prompt.
+const OPUS_MARKER = 'OPUS-JUSTIFIED:';
+
+function hasOpusJustification(prompt) {
+  const i = prompt.indexOf(OPUS_MARKER);
+  if (i === -1) return false;
+  return prompt.slice(i + OPUS_MARKER.length).trim().split('\n')[0].trim().length >= 10;
+}
+
+function denyUnjustifiedOpus(subagentType) {
+  let reason =
+    'AGENT DISPATCH BLOCKED: model "opus" on subagent_type "' + subagentType + '" needs a ' +
+    'justification (AGENT-TIER DISCIPLINE). Coding, editing, fixing, review and operational ' +
+    'sequences run on sonnet; opus is for architecture and ambiguous cross-codebase design. ' +
+    'Re-issue with model: "sonnet", or keep opus and add a line to the prompt: ' +
+    OPUS_MARKER + ' <why sonnet is not enough>.';
+  if (reason.length > 700) reason = reason.slice(0, 697) + '...';
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: reason,
+    },
+  }));
+}
+
 // Line budget by subagent_type: substring match against a lowercased type
 // string, first hit wins, in the order listed — so "sonnet-coder" hits the
 // "coder" bucket even though it also contains no other keyword, and a type
@@ -143,8 +172,20 @@ function main() {
     return;
   }
 
-  // JOB B — inject the return contract, unless it is already present.
   const prompt = typeof input.prompt === 'string' ? input.prompt : '';
+
+  // JOB C — opus on an inheriting type needs a stated reason.
+  if (
+    process.env.GSD_DISPATCH_OPUS_GUARD !== 'off' &&
+    inheritingTypeSet().has(subagentType.toLowerCase()) &&
+    hasExplicitModel && input.model.trim().toLowerCase() === 'opus' &&
+    !hasOpusJustification(prompt)
+  ) {
+    denyUnjustifiedOpus(subagentType || '(default/general-purpose)');
+    return;
+  }
+
+  // JOB B — inject the return contract, unless it is already present.
   if (prompt.includes(SENTINEL)) return; // idempotent — no output at all
 
   const lineBudget = resolveLineBudget(subagentType);

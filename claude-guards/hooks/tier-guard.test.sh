@@ -197,6 +197,34 @@ assert ui["description"]=="do stuff", ui
 assert len(ui["prompt"]) > len("do the thing"), ui["prompt"]
 '
 
+run "$DISPATCH_GUARD" '{"tool_name":"Agent","tool_input":{"subagent_type":"general-purpose","model":"opus","description":"do stuff","prompt":"fix the bug"}}'
+check "dispatch-guard: general-purpose + opus, no justification -> deny" "$DENY_CHECK"
+
+run "$DISPATCH_GUARD" '{"tool_name":"Agent","tool_input":{"subagent_type":"general-purpose","model":"opus","description":"do stuff","prompt":"design it\n\nOPUS-JUSTIFIED: cross-codebase architecture, no spec yet"}}'
+check "dispatch-guard: general-purpose + opus + justification -> allow" '
+import json,sys
+ho=json.load(sys.stdin)["hookSpecificOutput"]
+assert ho["permissionDecision"]=="allow", ho
+'
+
+run "$DISPATCH_GUARD" '{"tool_name":"Agent","tool_input":{"subagent_type":"general-purpose","model":"opus","description":"do stuff","prompt":"fix it\n\nOPUS-JUSTIFIED: x"}}'
+check "dispatch-guard: opus + too-short justification -> deny" "$DENY_CHECK"
+
+run "$DISPATCH_GUARD" '{"tool_name":"Agent","tool_input":{"subagent_type":"general-purpose","model":"opus","description":"do stuff","prompt":"fix the bug"}}' \
+  "GSD_DISPATCH_OPUS_GUARD=off"
+check "dispatch-guard: opus guard off via env -> allow" '
+import json,sys
+ho=json.load(sys.stdin)["hookSpecificOutput"]
+assert ho["permissionDecision"]=="allow", ho
+'
+
+run "$DISPATCH_GUARD" '{"tool_name":"Agent","tool_input":{"subagent_type":"general-purpose","model":"sonnet","description":"do stuff","prompt":"fix the bug"}}'
+check "dispatch-guard: general-purpose + sonnet -> allow" '
+import json,sys
+ho=json.load(sys.stdin)["hookSpecificOutput"]
+assert ho["permissionDecision"]=="allow", ho
+'
+
 run "$DISPATCH_GUARD" '{"tool_name":"Agent","tool_input":{"subagent_type":"sonnet-coder","description":"code it","prompt":"fix the bug"}}'
 check "dispatch-guard: sonnet-coder, no model -> allow with updatedInput" '
 import json,sys
