@@ -86,9 +86,52 @@ stops denying is worse than no hook:
 ```bash
 cd ~/.claude/hooks
 ./memtrace-first-guard.test.sh      # 199 cases
-./tier-guard.test.sh                #  49 cases
+./tier-guard.test.sh                #  54 cases (also covers agent-dispatch-guard)
 ./measure-dont-infer-guard.test.sh  #  66 cases
 ```
+
+## agent-dispatch-guard.cjs
+
+Runs on every `Agent` call (PreToolUse). It does three independent jobs.
+
+| Job | Trigger | Result |
+|---|---|---|
+| A | `subagent_type` is `general-purpose`, `claude`, `explore`, `plan` or empty, and `model` is omitted | Deny. These types inherit the parent's model, so omitting it silently buys the parent's tier. |
+| C | Same types, `model` is `opus`, and the prompt has no `OPUS-JUSTIFIED:` line | Deny. Job A proves a model was chosen; job C checks the choice is defended. |
+| B | Any call that was not denied | Allow, and append a return contract (a line budget for the reply) to the prompt. |
+
+A justification counts when text follows `OPUS-JUSTIFIED:` on the same line and is at
+least 10 characters long. Named agents such as `sonnet-coder` pin their own model and
+are never subject to jobs A or C.
+
+Tier guidance used by the deny messages: `haiku` for mechanical search, IO and counting;
+`sonnet` for coding, editing, fixing, review and operational sequences; `opus` for
+architecture and ambiguous cross-codebase design only.
+
+| Environment variable | Effect |
+|---|---|
+| `GSD_DISPATCH_GUARD=off` | Disable all three jobs. |
+| `GSD_DISPATCH_OPUS_GUARD=off` | Disable job C only. |
+| `GSD_DISPATCH_INHERIT_TYPES` | Comma-separated extra types treated as inheriting. |
+| `GSD_DISPATCH_RETURN_LINES` | Override the return-contract line budget. |
+
+### Why job C exists
+
+Job A was added so that nobody pays opus rates by accident. It did not stop anyone paying
+them on purpose: passing `model: "opus"` satisfied the check, and a coding task was
+dispatched to opus that way. A guard that only asks "was a model named?" cannot tell a
+considered choice from a copied one. Job C moves the burden onto the caller: opus stays
+available, but the caller must write down why sonnet is not enough, which is usually
+enough to make them pick sonnet.
+
+### How to dispatch an opus subagent when you need one
+
+1. Confirm the work is design or cross-codebase synthesis, not implementation of a
+   settled design.
+2. Set `model: "opus"` on the call.
+3. Add a line to the prompt: `OPUS-JUSTIFIED: <why sonnet is not enough>`.
+4. If the guard still denies, the reason after the marker is shorter than 10
+   characters. Write a real reason, or switch to `sonnet`.
 
 ## Restoring
 
