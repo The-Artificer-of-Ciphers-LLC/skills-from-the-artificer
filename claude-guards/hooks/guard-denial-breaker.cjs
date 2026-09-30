@@ -5,15 +5,31 @@
 //
 // RULE: after a guard (hook or auto-mode classifier) denies an action AND that
 // denial forbids routing around it, or after a subagent reports it was blocked,
-// EVERY further tool call is denied until the human sends a new message.
+// the breaker INTERRUPTS THE AGENT AND MAKES IT START OVER. It denies exactly ONE
+// tool call (the next one attempted after the trip) with a restart instruction,
+// then allows tool calls again. It never stops the run or waits for the human.
 //
-// INCIDENT (2026-09-29): the orchestrator and its subagents repeatedly routed
-// around guards. memtrace-first-guard denied Bash reads of indexed source and
-// the Read tool on the same files was allowed; a subagent refused a guarded
-// action and reported it, and the orchestrator re-dispatched a fresh subagent
-// pre-told the guard "did not apply", then later ran a command a subagent had
-// been denied. A denial that says "do not route around" is a stop sign for the
-// AGENT, not a puzzle: this hook makes the stop mechanical.
+// WHY: the old behavior (deny everything until the human typed a new message)
+// made the agent stop and ask the human to type something, and it tripped on
+// harmless things (a subagent report merely quoting a denial, a redirect-style
+// denial that just names the sanctioned tool), stalling whole runs. The failure
+// it guards against is the agent routing around a guard (retrying, rephrasing,
+// shell-wrapping, delegating, or re-dispatching a subagent told the guard does
+// not apply). A single forced re-plan interrupts that reflex without a stall.
+//
+// MECHANICS (stateless, via the transcript):
+//   * The interrupt text begins with the sentinel "GUARD-BREAKER RESTART:". A trip
+//     is acknowledged once a tool_result error beginning with that sentinel
+//     appears AFTER the trip event; only a NEW trip event after the last sentinel
+//     interrupt causes another interrupt.
+//   * Sentinel-prefixed messages ("GUARD-BREAKER ...") are excluded from T1-phrase
+//     scanning, so the breaker can never re-trip on its own denials.
+//   * BACKSTOP: MAX_RESTARTS_PER_TURN (constant below, currently 5) restart
+//     interrupts since the last real human message fall back to the hard
+//     behavior: deny everything except a Write to .gsd/phase/<x>/HALT.md until a
+//     human message arrives; the message tells the agent to stop and hand back a
+//     short factual summary of what is blocked.
+//   * A real human message resets everything (only entries after it are counted).
 //
 // TRANSCRIPT SHAPES (measured 2026-09-29 against a real session transcript):
 //   * real human message:  {type:"user", message:{content:<string>}} or content
@@ -37,11 +53,10 @@
 // are scanned for T1 phrases, so reading a file that merely QUOTES the phrases
 // (e.g. this hook's own source) cannot trip the breaker.
 //
-// Allowed while tripped: a Write to .gsd/phase/<x>/HALT.md (so the run-incomplete
-// Stop hook can be satisfied) and nothing else.
 // Human kill switch: GSD_GUARD_BREAKER_OFF=1 exported in the shell that launches
-// Claude Code. Fails OPEN on any internal error. Trips are logged (bounded) to
-// ~/.claude/logs/guard-denial-breaker.jsonl; logging never affects the decision.
+// Claude Code. Fails OPEN on any internal error. Restart interrupts and backstop
+// trips are logged (bounded) to ~/.claude/logs/guard-denial-breaker.jsonl;
+// logging never affects the decision.
 'use strict';
 
 const fs = require('node:fs');
@@ -49,6 +64,12 @@ const os = require('node:os');
 const path = require('node:path');
 
 const MAX_TAIL = 8 * 1024 * 1024;
+
+// Restart interrupts allowed per human turn before the hard stop backstop.
+const MAX_RESTARTS_PER_TURN = 5;
+const SENTINEL = 'GUARD-BREAKER ';
+const RESTART_PREFIX = 'GUARD-BREAKER RESTART:';
+const HARNESS_PREFIX_RE = /^PreToolUse:\S+ hook error:\s*/; // harness wraps hook denials
 
 const T1_PHRASES = [
   'do not rephrase',
@@ -166,6 +187,7 @@ function tripText(d, agentIds) {
   for (const b of c) {
     if (!b || b.type !== 'tool_result') continue;
     const text = blocksText(b.content);
+    if (text.trimStart().replace(HARNESS_PREFIX_RE, '').startsWith(SENTINEL)) continue;
     if (b.is_error === true || looksLikeDenialText(text)) {
       if (findT1Phrase(text)) return text;
     }
@@ -182,7 +204,16 @@ function isBlockedReport(text) {
   return blocked && why;
 }
 
-function logTrip(payload, quoted) {
+// Does this entry carry a tool_result error that is a breaker restart interrupt?
+function isRestartAck(d) {
+  if (!d || d.type !== 'user') return false;
+  const c = d.message && d.message.content;
+  if (!Array.isArray(c)) return false;
+  return c.some((b) => b && b.type === 'tool_result' && b.is_error === true
+    && blocksText(b.content).trimStart().replace(HARNESS_PREFIX_RE, '').startsWith(RESTART_PREFIX));
+}
+
+function logTrip(payload, kind, quoted) {
   try {
     const dir = path.join(os.homedir(), '.claude', 'logs');
     fs.mkdirSync(dir, { recursive: true });
@@ -191,6 +222,7 @@ function logTrip(payload, quoted) {
     fs.appendFileSync(f, JSON.stringify({
       ts: new Date().toISOString(),
       session: payload.session_id || '',
+      kind,
       tool: payload.tool_name || '',
       quoted: String(quoted).slice(0, 300),
     }) + '\n');
@@ -231,25 +263,42 @@ async function main() {
     }
   }
 
+  let lastTrip = -1;
   let tripped = null;
+  let lastAck = -1;
+  let acks = 0;
   for (let i = lastHuman + 1; i < entries.length; i += 1) {
+    if (isRestartAck(entries[i])) { lastAck = i; acks += 1; continue; }
     const t = tripText(entries[i], agentIds);
-    if (t) { tripped = t; break; }
+    if (t) { lastTrip = i; tripped = t; }
   }
-  if (!tripped) return allow();
 
-  // Sole exception while tripped: the HALT.md write.
   const input = (payload.tool_input && typeof payload.tool_input === 'object') ? payload.tool_input : {};
-  if (payload.tool_name === 'Write' && typeof input.file_path === 'string' && /\/\.gsd\/phase\/[^/]+\/HALT\.md$/.test(input.file_path)) {
-    return allow();
+
+  // Backstop: too many interrupts this human turn -> hard stop until a human message.
+  if (acks >= MAX_RESTARTS_PER_TURN) {
+    if (payload.tool_name === 'Write' && typeof input.file_path === 'string' && /\/\.gsd\/phase\/[^/]+\/HALT\.md$/.test(input.file_path)) {
+      return allow();
+    }
+    logTrip(payload, 'backstop', String(tripped || '').replace(/\s+/g, ' ').trim().slice(0, 300));
+    return deny(
+      SENTINEL + 'HALT: you have been interrupted ' + acks + ' times this turn because guards keep denying or ' +
+      'blocking your actions. Stop now. Tool calls are disabled until the user replies. Hand back a short factual ' +
+      'summary of what is blocked and nothing else.'
+    );
   }
 
-  const quoted = String(tripped).replace(/\s+/g, ' ').trim().slice(0, 300);
-  logTrip(payload, quoted);
+  // No new trip since the last interrupt (or no trip at all) -> allow.
+  if (lastTrip < 0 || lastTrip < lastAck) return allow();
+
+  logTrip(payload, 'restart', String(tripped).replace(/\s+/g, ' ').trim().slice(0, 300));
   return deny(
-    'GUARD-DENIAL BREAKER: a guard denied an action and forbade routing around it (quoted: ' + quoted + '). ' +
-    'Do not retry, reshape, re-dispatch, or delegate it. Stop and tell the user in plain text what was blocked; ' +
-    'tool calls are disabled until the user replies.'
+    RESTART_PREFIX + ' a guard just denied an action, or a subagent reported being blocked. Do not report this to ' +
+    'the user and do not wait for them. Discard the blocked approach and every equivalent of it, re-plan, and ' +
+    'continue the task using the compliant path the guard itself prescribes (for example the sanctioned tool it ' +
+    'names). Never retry, rephrase, shell-wrap or delegate the blocked action, and never re-dispatch a subagent ' +
+    'with an instruction that the guard does not apply. If no compliant path exists for this step, pick a ' +
+    'different step of the task that has one.'
   );
 }
 

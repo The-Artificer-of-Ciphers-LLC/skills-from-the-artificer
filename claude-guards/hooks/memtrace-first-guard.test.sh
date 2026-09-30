@@ -219,6 +219,17 @@ assert reason.startswith("DO NOT REPHRASE THIS COMMAND TO GET PAST THIS GUARD.")
 assert "circumvention, not problem-solving" in reason, reason
 '
 
+run "{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$REAL_REPO/src/cli-exit.cts\"},\"cwd\":\"$REAL_REPO\"}"
+check "1.6.2 denied Read of indexed source names the worktree absolute-path requirement" '
+import json,sys
+d=json.load(sys.stdin)
+ho=d["hookSpecificOutput"]
+assert ho["permissionDecision"] == "deny", ho
+reason = ho["permissionDecisionReason"]
+assert "ABSOLUTE path" in reason, reason
+assert "relative path resolves" in reason, reason
+'
+
 echo "=== fail-open: never crash-to-deny ==="
 
 run '{"tool_name":"Write","tool_input":{"file_path":"src/cli-exit.cts"}}'
