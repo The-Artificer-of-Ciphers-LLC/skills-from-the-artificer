@@ -621,9 +621,13 @@ sweep that fans out across worktrees, hand the binding to one agent at a time.
    - Re-run `verify_intent` / `governing_contracts` to confirm the fix does **not** violate a
      `Held` decision or a binding contract. If it would, set the issue to `needs-decision` and
      raise it with the user rather than overriding a recorded decision.
-3. Cross-reference the fix against `/skills-from-the-artificer` (Artificer Laws) — safety,
-   optimization, and legacy-software principles. Document which laws apply and how the fix honors
-   them.
+3. **Run the Artificer laws — a real `Skill` call, not a recollection.** Invoke
+   `/skills-from-the-artificer` with `args`: the one-sentence root cause, the files/symbols the fix
+   touches, and `preset: bugfix-review` (safety · optimization · legacy). Paste its
+   `## Laws that apply` block into the diagnosis. Only the 24 named laws in that collection count;
+   a principle you coin yourself or lift from memory ("Smallest Sufficient Change", a recorded
+   decision) is not an Artificer law and does not satisfy this step. Past runs wrote this section
+   without ever calling the skill; the hook checks the section exists, only you make it honest.
 4. **Style contract.** `get_style_fingerprint(repo_id, file_path)` → the empirical idiom of the code
    you are joining. Do not import a foreign style into an established seam.
 
@@ -640,7 +644,7 @@ sweep that fans out across worktrees, hand the binding to one agent at a time.
    ## Blast radius        — get_impact / preflight_check rating + dependent count PER symbol
    ## Recorded decisions  — recall_decision / verify_intent result; is the BUG a violation of a Held decision?
    ## Must-Have Acceptance Checklist   — verbatim from the issue
-   ## Laws that apply     — from /skills-from-the-artificer, and how the fix honors each
+   ## Laws that apply     — the block returned by the /skills-from-the-artificer Skill call (fired / cleared / actions); law names must be from the 24-law collection
    ```
 
    ```markdown

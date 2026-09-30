@@ -1,62 +1,72 @@
 ---
 name: skills-from-the-artificer
-description: Dispatcher for the Artificer laws-of-software collection. Given a proposed change, fix, diff, design, or decision, classify it and invoke the relevant law/principle skill(s) — instead of recalling all 24 individually. Use when the user says "cross-reference against the Artificer laws", "which laws apply here?", "run the artificer review", "apply the laws of software to this", or when a code/design review wants the relevant software-law lenses surfaced automatically. Also the entry point for Step 2 of the Bug Remediation workflow ("adheres to safety, optimization, and legacy software principles").
+description: Dispatcher for the Artificer laws-of-software collection (24 laws). Given ANY proposed change, fix, diff, PR, design, ADR, refactor, or architecture decision, classify it and apply only the laws that fire — instead of recalling all 24. Invoke whenever the user or a workflow says "which laws apply", "Artificer laws", "cross-reference against the laws of software", "run the artificer review", "apply the laws of software", "classify and list applicable laws", "safety, optimization, and legacy principles" (bug-fixer Step 2), or asks whether a design, fix, PR, API/CLI-output change, parser, metric/ratchet, rewrite, or new dependency has any software-law problems — even if no law is named. Also invoke during design reviews, PR reviews, triage architecture forks, and feature-builder design steps. Prefer this over loading individual law skills for a change that could touch several laws; use a single law skill directly only when the user asks about that one law by name.
 ---
 
 # Skills from the Artificer — Law Dispatcher
 
-This is a **router**, not a law itself. The collection ships 24 laws-of-software reference skills. Rather than recall each one, invoke this skill with a change or decision in hand; it classifies the work and points you at the specific law skill(s) worth applying.
+A **router plus a fast lens table**. The collection has 24 law skills; a change usually trips 1–4 of them. Classify the change, apply the matching lenses, report. Speed matters: this runs inside unattended workflows (bug-fixer Step 2, feature-builder design, review-open-prs, triage architecture fork), so answer from the lens table below and load a full law skill only when a lens fires and you need its depth. Loading every matched law as a separate step is what made past runs slow, and the loaded text mostly restates the lens.
 
-## How to use
+## Procedure
 
-1. **Gather the subject.** Identify what you're evaluating: a code diff, a proposed fix, an architecture decision, a plan/estimate, a metric, an API change. If a diff is in play, look at the actual changed lines (`git diff`), not just the description.
-2. **Classify it** against the signal table below. A single change usually hits 1–4 laws — not all 24. Resist the urge to dump the whole catalogue.
-3. **Invoke each matched law skill** by its name (e.g. run the `hyrums-law` skill, or read `<law>/SKILL.md`). Apply its "Key questions" section to the change.
-4. **Report** which laws fired, what each surfaced, and any action items. If nothing matches, say so — a no-op is a valid result.
+1. **Gather the subject.** For a diff, read the changed lines (`git diff <base>...HEAD`), not only the description. For a design, read the design text. State the subject in one sentence.
+2. **Classify** against the signal table. Pick the 1–4 laws whose signal is actually present. Matching none is a valid result — force-fitting a law is its own failure.
+3. **Apply each lens** using the question in the table, answered against this specific change (name the file/symbol/contract). Load `<law>/SKILL.md` only if the lens fires and you need its remedies.
+4. **Report** in the output format below. Do not ask the user anything; produce the report and let the caller decide.
 
-## Signal → law mapping
+## Signal → law → lens
 
-| If the change involves… | Apply |
-|---|---|
-| A public API, interface, or widely-used contract; backward compatibility; deprecation; "is this breaking?" | `hyrums-law` |
-| Input validation, parsing, protocol/format handling, strict-vs-lenient acceptance | `postels-law` |
-| Security, auth, encryption, or relying on a hidden algorithm/design for safety | `kerckhoffs-principle` |
-| Performance work, optimization, "make it faster", complex structures for speed | `knuths-optimization-principle`, `wirths-law` |
-| Compute/hardware-trend assumptions ("hardware will catch up") | `moores-law` |
-| Clever/terse code, one-liners, hard-to-debug logic, readability tradeoffs | `kernighans-law` |
-| A homegrown config language, rules engine, DSL, or templating/scripting layer | `greenspuns-tenth-rule` |
-| An ORM/framework/library leaking its internals; an abstraction breaking down | `leaky-abstractions` |
-| Adding a new framework/library/datastore, or proposing a rewrite | `choose-boring-technology` |
-| Building a big new system from scratch / a big-bang rewrite | `galls-law` |
-| Module boundaries, service splits, ownership, org-shaped architecture | `conways-law` |
-| Code review process, how many reviewers, bug-finding via more eyes | `linuss-law` |
-| Metrics, OKRs, KPIs, velocity, anything people are scored on | `goodharts-law` |
-| Time estimates, schedules, "how long will this take", missed deadlines | `hofstadters-law`, `parkinsons-law` |
-| Scope/feature creep, "let's also add…", a product expanding past its purpose | `zawinskis-law` |
-| Promotions, career ladders, IC→manager moves, team competence/fit | `peter-principle` |
-| Product-team culture, motivation, engagement, outsourcing decisions | `doerrs-law` |
-| A legacy system that won't die / a tool prolonging the problem it solves | `shirky-principle` |
-| Eliciting feedback, getting answers, drafting a question or PR description | `cunninghams-law` |
-| UI layout, click/touch targets, button placement, menus | `fitts-law` |
-| Claims about AI creativity / machines "originating" ideas | `lady-lovelaces-objection` |
-| Growth/adoption claims, "exponential", "will double", market-size math | `norvigs-law` |
+| Signal in the change | Law | Lens: the question to answer |
+|---|---|---|
+| Public API, CLI output/exit codes, file formats, JSON shapes, error text, ordering; "is this breaking?"; migrating call sites; fixing a long-lived bug | `hyrums-law` | Who could depend on the old observable behavior (scripts parsing output, tests pinning text, ordering)? Is there a version/deprecation path? |
+| Parsers, validators, loaders, protocol/format handling, regex over text output, strict-vs-lenient input | `postels-law` | Is each boundary deliberately strict or lenient, and is lenient input normalized once at the edge rather than propagated? |
+| Auth, secrets, guards, hooks, sandboxing, anything whose safety rests on being unknown | `kerckhoffs-principle` | Would this still be safe if the mechanism were public? Is the secret only the key? |
+| Optimization, caching, "make it faster", clever data structures | `knuths-optimization-principle`, `wirths-law` | Was the bottleneck measured? Does the complexity buy a proven gain, or add a maintenance/perf cost of its own? |
+| Hardware/CI-capacity assumptions ("runners will catch up") | `moores-law` | Does the plan rely on capacity growth that isn't guaranteed? |
+| Dense/clever code, hard-to-debug logic, long regexes, nested conditionals | `kernighans-law` | Could the author debug this at 2 a.m.? Is cleverness spent that debugging will need? |
+| Homegrown config language, rules engine, DSL, template/include/conditional layer | `greenspuns-tenth-rule` | Is this an ad-hoc, bug-ridden reimplementation of an existing language/tool? |
+| ORM/framework/library internals leaking; abstraction breaking down; platform quirks (Windows paths, argv limits) | `leaky-abstractions` | What does the abstraction hide that this change now depends on? Is the leak handled at one seam? |
+| New framework, library, datastore, runtime, or a rewrite | `choose-boring-technology` | Is this spending an innovation token where boring tech would do? |
+| Big new system or big-bang rewrite from scratch | `galls-law` | Does a working simple system exist to evolve instead? Can it ship in increments? |
+| Module/service/ownership boundaries; org-shaped architecture; core vs plugin split | `conways-law` | Does the boundary match who owns and changes each side? |
+| Review process, reviewer count, bug-finding via more eyes | `linuss-law` | Does the process actually put independent eyes on the risky part? |
+| Metrics, thresholds, ratchets, coverage/mutation scores, velocity, anything scored | `goodharts-law` | Once this number is a target, how will it be gamed or stop measuring the real thing? |
+| Estimates, schedules, sharding/timing tables, deadlines | `hofstadters-law`, `parkinsons-law` | Is the estimate padded for the known unknowns? Will the work expand to fill the slot? |
+| Scope creep, "let's also add…", a tool growing past its purpose | `zawinskis-law` | Is this change absorbing an unrelated responsibility? |
+| Promotions, career ladders, team-role fit | `peter-principle` | Is competence in the current role being rewarded with a role it doesn't predict? |
+| Product-team culture, motivation, outsourcing | `doerrs-law` | Missionary or mercenary ownership? |
+| Legacy system that won't die; a tool sustaining the problem it solves | `shirky-principle` | Does the institution/tool depend on the problem persisting? |
+| Eliciting feedback; drafting a question or PR description | `cunninghams-law` | Would a confident, checkable claim draw better correction than an open question? |
+| UI layout, click/touch targets | `fitts-law` | Are frequent targets large and near? |
+| Claims about AI/machine creativity | `lady-lovelaces-objection` | Is "originating" being claimed for recombination? |
+| Growth/adoption/"exponential" claims | `norvigs-law` | At the current adoption level, is another doubling still mathematically possible? |
 
 ## Presets
 
-Named bundles for common review contexts. Invoke the listed laws together.
+Named bundles; apply all listed lenses.
 
-- **`bugfix-review`** (safety · optimization · legacy) — the Bug Remediation workflow's Step 2 cross-reference:
-  `kerckhoffs-principle`, `postels-law`, `hyrums-law`, `kernighans-law`, `knuths-optimization-principle`, `leaky-abstractions`
-  → Does the fix preserve security? Stay lenient/strict at the right boundaries? Avoid breaking observable behavior others depend on? Stay debuggable? Avoid premature optimization? Respect the abstraction it touches?
-- **`design-review`** (is this the right shape?) —
-  `galls-law`, `choose-boring-technology`, `conways-law`, `greenspuns-tenth-rule`, `zawinskis-law`
-- **`api-review`** (will this age well?) —
-  `hyrums-law`, `postels-law`, `kernighans-law`
-- **`planning-review`** (will this ship on time / measure the right thing?) —
-  `hofstadters-law`, `parkinsons-law`, `goodharts-law`
+- **`bugfix-review`** (safety · optimization · legacy) — `kerckhoffs-principle`, `postels-law`, `hyrums-law`, `kernighans-law`, `knuths-optimization-principle`, `leaky-abstractions`. Does the fix keep security intact, hold the right strict/lenient boundaries, avoid breaking behavior others rely on, stay debuggable, avoid premature optimization, and respect the abstraction it touches?
+- **`design-review`** — `galls-law`, `choose-boring-technology`, `conways-law`, `greenspuns-tenth-rule`, `zawinskis-law`
+- **`api-review`** — `hyrums-law`, `postels-law`, `kernighans-law`
+- **`consolidation-review`** (dedupe/single-owner refactors, drift guards, ratchets) — `hyrums-law`, `postels-law`, `goodharts-law`, `leaky-abstractions`
+- **`planning-review`** — `hofstadters-law`, `parkinsons-law`, `goodharts-law`
+
+## Output format
+
+Workflows paste this into PR bodies and design docs under "Laws that apply", so keep this shape:
+
+```
+## Laws that apply
+Subject: <one sentence>
+- **<law>** — fired: <what it surfaced for this change, naming the file/symbol>. Action: <change to make, or "none — already honored because …">.
+Considered and cleared: <law>, <law> (one clause why each does not apply)
+Action items: <numbered list, or "none">
+```
+
+If nothing fires: `## Laws that apply` / `None fire — <one-sentence reason>.`
 
 ## Notes
 
-- This skill never overrides a law's own guidance — it only decides *which* laws are in scope. Read the matched skill before drawing conclusions.
-- When several laws fire, apply them in the order listed (most change-specific first).
-- Matching zero laws is fine. Don't force-fit a law to look thorough — that's its own anti-pattern.
+- This skill never overrides a law's own guidance; it only decides which laws are in scope.
+- Order findings most change-specific first.
+- The lens questions are prompts for thinking, not verdicts. A lens that "fires" needs a concrete consequence for this change; otherwise it is cleared.
