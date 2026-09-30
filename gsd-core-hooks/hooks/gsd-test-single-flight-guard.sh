@@ -127,11 +127,57 @@ target_sha="$(printf '%s' "$cmd_masked" | grep -oE -- '--head[[:space:]=]+[0-9a-
 # B. Per-worktree state dir. Uses the per-worktree git-dir (for a linked
 # worktree this is <common>/worktrees/<name>), NOT the common git dir, so
 # parallel worktrees do not block each other -- that is intentional.
-git_dir="$(git rev-parse --git-dir 2>/dev/null || true)"
+#
+# The hook process cwd is NOT the launching worktree (it is often the main
+# checkout), so the worktree comes from the hook payload .cwd and git runs with
+# -C. Only when .cwd is absent or not a directory does this fall back to the
+# hook process cwd.
+payload_cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null || true)"
+git_dir=""
+if [ -n "$payload_cwd" ] && [ -d "$payload_cwd" ]; then
+  git_dir="$(git -C "$payload_cwd" rev-parse --absolute-git-dir 2>/dev/null || true)"
+else
+  git_dir="$(git rev-parse --git-dir 2>/dev/null || true)"
+  [ -n "$git_dir" ] && git_dir="$(cd "$git_dir" && pwd)"
+fi
 [ -z "$git_dir" ] && exit 0
-git_dir="$(cd "$git_dir" && pwd)"
 inflight="$git_dir/gsd-inflight"
 mkdir -p "$inflight"
+
+# Bench scoping. The bench set is re-read from the gsd-test config on EVERY
+# invocation (never hard-coded) so a newly configured bench is guarded at once.
+# Only name = "..." keys inside [[benches]] tables count. If the config yields
+# no benches the wildcard sentinel is returned so an unreadable config
+# conservatively blocks rather than failing open.
+configured_benches() {
+  local out
+  out="$(awk '
+    /^[[:space:]]*\[\[benches\]\]/ { inb=1; next }
+    /^[[:space:]]*\[/ { inb=0; next }
+    inb && /^[[:space:]]*name[[:space:]]*=/ {
+      v=$0; sub(/^[^=]*=/, "", v); sub(/[[:space:]]*#.*$/, "", v)
+      gsub(/["[:space:]]/, "", v)
+      if (v != "") print v
+    }' "$HOME/.config/gsd-test/config.toml" 2>/dev/null | sort -u || true)"
+  if [ -z "$out" ]; then printf '*\n'; else printf '%s\n' "$out"; fi
+}
+
+# expand_benches SPEC: "*" (or empty) means every configured bench, else names.
+expand_benches() {
+  local spec="$1" out
+  case " $spec " in
+    *" * "*) configured_benches; return 0 ;;
+  esac
+  out="$(printf '%s' "$spec" | tr -s '[:space:]' '\n' | grep -v '^$' | sort -u || true)"
+  if [ -z "$out" ]; then configured_benches; else printf '%s\n' "$out"; fi
+}
+
+# Requested bench spec: --bench NAME / --bench=NAME, comma-separated allowed.
+# No --bench means the run fans out over all benches.
+req_spec="$(printf '%s' "$cmd_masked" | grep -oE -- '--bench[[:space:]=]+[^[:space:]]+' \
+  | sed -E 's/^--bench[[:space:]=]+//' | tr ',' ' ' | tr '\n' ' ' || true)"
+req_spec="$(printf '%s' "$req_spec" | tr -s '[:space:]' ' ' | sed -E 's/^ +| +$//g' || true)"
+[ -z "$req_spec" ] && req_spec="*"
 
 # C. Liveness helper -- anchored match (see live_re_for above) means a process
 # merely quoting/mentioning the sha (e.g. this very hook's own shell) never
@@ -164,15 +210,36 @@ fi
 # E. Decide based on remaining markers.
 same_match=0
 other_shas=""
+conflict_benches=""
+used_benches=""
+req_list="$(expand_benches "$req_spec")"
 for f in "$inflight"/*; do
   [ -e "$f" ] || continue
   sha="$(basename "$f")"
+  marker_spec="$(cat "$f" 2>/dev/null || true)"
+  marker_list="$(expand_benches "$marker_spec")"
+  used_benches="$used_benches
+$marker_list"
   if [ "$sha" = "$target_sha" ]; then
     same_match=1
   else
-    other_shas="$other_shas $sha"
+    # A different sha only conflicts when the two runs share a bench.
+    overlap="$(comm -12 <(printf '%s\n' "$req_list" | sort -u) <(printf '%s\n' "$marker_list" | sort -u) \
+      | grep -v '^[[:space:]]*$' || true)"
+    if [ -n "$overlap" ]; then
+      other_shas="$other_shas $sha"
+      conflict_benches="$conflict_benches
+$overlap"
+    fi
   fi
 done
+conflict_benches="$(printf '%s\n' "$conflict_benches" | grep -v '^[[:space:]]*$' | sort -u | tr '\n' ' ' || true)"
+conflict_benches="${conflict_benches% }"
+used_list="$(printf '%s\n' "$used_benches" | grep -v '^[[:space:]]*$' | sort -u || true)"
+all_list="$(configured_benches)"
+free_benches="$(comm -23 <(printf '%s\n' "$all_list" | sort -u) <(printf '%s\n' "$used_list" | sort -u) \
+  | grep -v '^[[:space:]]*$' | grep -vx '\*' | tr '\n' ' ' || true)"
+free_benches="${free_benches% }"
 
 if [ "$same_match" -eq 1 ]; then
   # `|| true`: under `set -e` the command substitution inherits the while
@@ -198,7 +265,12 @@ GSD_HUMAN_OVERRIDE=1.)"
 fi
 
 if [ -n "$(printf '%s' "$other_shas" | tr -d '[:space:]')" ]; then
-  benches="$(grep -E '^[[:space:]]*host[[:space:]]*=' "$HOME/.config/gsd-test/config.toml" 2>/dev/null | sed -E 's/.*"([^"]+)".*/\1/' | tr '\n' ' ')"
+  if [ -n "$free_benches" ]; then
+    free_line="free benches: $free_benches
+Re-launch pinned to a free bench instead, e.g. --bench ${free_benches%% *}"
+  else
+    free_line="free benches: none"
+  fi
 
   inflight_lines=""
   cleanup_lines=""
@@ -217,9 +289,11 @@ if [ -n "$(printf '%s' "$other_shas" | tr -d '[:space:]')" ]; then
   done
 
   deny "gsd-test-single-flight-guard BLOCKED — this worktree already has a
-gsd-test run IN FLIGHT for a different sha.
+gsd-test run IN FLIGHT for a different sha on an overlapping bench.
 
-${inflight_lines}  requested: $target_sha
+${inflight_lines}  requested: $target_sha  (bench: $req_spec)
+conflicting benches: $conflict_benches
+$free_line
 
 gsd-test is the LAST action before push, not a mid-work checkpoint. It is
 sha-bound, so amending the tree after launching abandons the run -- and
@@ -231,13 +305,12 @@ Finish the tree FIRST -- proofread the artifact, run the cheap gates (lint,
 --check generators) -- and launch ONCE.
 
 If you genuinely must abandon the in-flight run, clean it up explicitly:
-${cleanup_lines}(benches: $benches)
-NEVER blanket-sweep containers -- the benches are shared and host prod workloads.
+${cleanup_lines}NEVER blanket-sweep containers -- the benches are shared and host prod workloads.
 
 (Human-only escape, never for the agent: re-issue prefixed with
 GSD_HUMAN_OVERRIDE=1.)"
 fi
 
 # F. No conflicting run -- mark this sha in flight and allow.
-touch "$inflight/$target_sha"
+printf '%s\n' "$req_spec" > "$inflight/$target_sha"
 exit 0
