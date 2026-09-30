@@ -195,6 +195,22 @@ sha_is_live() {
   grep -Eq -- "$(live_re_for "$1")" <<<"$out"
 }
 
+# proc_bench_spec SHA: the bench spec a LIVE run for SHA was actually launched
+# with, read from its process args (never from the marker file, which other
+# sessions/versions write EMPTY). Unions every `--bench NAME` / `--bench=NAME`
+# value (comma-separated allowed) across matching process lines. Prints nothing
+# when the process has no --bench. `ps` is captured first, then grepped via a
+# here-string (same pipefail/SIGPIPE convention as sha_is_live).
+proc_bench_spec() {
+  local out lines
+  out="$(ps -eo args= 2>/dev/null)"
+  lines="$(grep -E -- "$(live_re_for "$1")" <<<"$out" || true)"
+  [ -z "$lines" ] && return 0
+  grep -oE -- '--bench[[:space:]=]+[^[:space:]]+' <<<"$lines" \
+    | sed -E 's/^--bench[[:space:]=]+//' | tr ',' ' ' | tr '\n' ' ' \
+    | tr -s '[:space:]' ' ' | sed -E 's/^ +| +$//g' || true
+}
+
 # D. Prune dead markers.
 if [ -d "$inflight" ]; then
   find "$inflight" -maxdepth 1 -type f | while IFS= read -r f; do
@@ -216,7 +232,10 @@ req_list="$(expand_benches "$req_spec")"
 for f in "$inflight"/*; do
   [ -e "$f" ] || continue
   sha="$(basename "$f")"
-  marker_spec="$(cat "$f" 2>/dev/null || true)"
+  # Live process args first (authoritative); else marker content; else empty,
+  # which expands to every bench (a run with no --bench fans out over all).
+  marker_spec="$(proc_bench_spec "$sha" || true)"
+  [ -z "$marker_spec" ] && marker_spec="$(cat "$f" 2>/dev/null || true)"
   marker_list="$(expand_benches "$marker_spec")"
   used_benches="$used_benches
 $marker_list"
