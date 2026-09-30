@@ -79,19 +79,66 @@ function normalizeToolName(rawName) {
 // $ANTHROPIC_MODEL directly rather than throwing — an absent tier record is
 // not an error condition, it's just a session we haven't seen a
 // SessionStart for yet (or a runtime that doesn't emit one).
+const TRANSCRIPT_TAIL_BYTES = 256 * 1024;
+
+// Ground truth: the newest real assistant turn in the session transcript.
+// Reads only the tail of the file; any failure returns null (fall through).
+function tierFromTranscript(transcriptPath) {
+  if (typeof transcriptPath !== 'string' || !transcriptPath.endsWith('.jsonl')) return null;
+  let fd = null;
+  try {
+    const st = fs.statSync(transcriptPath);
+    if (!st.isFile() || st.size === 0) return null;
+    const len = Math.min(st.size, TRANSCRIPT_TAIL_BYTES);
+    const start = st.size - len;
+    fd = fs.openSync(transcriptPath, 'r');
+    const buf = Buffer.alloc(len);
+    let got = 0;
+    while (got < len) {
+      const n = fs.readSync(fd, buf, got, len - got, start + got);
+      if (n <= 0) break;
+      got += n;
+    }
+    const lines = buf.slice(0, got).toString('utf8').split('\n');
+    if (start > 0) lines.shift(); // first line is a partial line
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
+      if (!line || line.indexOf('"assistant"') === -1) continue;
+      let obj;
+      try { obj = JSON.parse(line); } catch { continue; }
+      if (!obj || obj.type !== 'assistant') continue;
+      const model = obj.message && obj.message.model;
+      if (typeof model !== 'string' || !model || model === '<synthetic>') continue;
+      return classifyTier(model);
+    }
+  } catch {
+    // Unreadable transcript — fall through to the next source.
+  } finally {
+    if (fd !== null) { try { fs.closeSync(fd); } catch { /* ignore */ } }
+  }
+  return null;
+}
+
+// Precedence: transcript (ground truth) > non-unknown session record >
+// $ANTHROPIC_MODEL > 'unknown' (fail-closed enforce, unchanged).
 function resolveTier(payload) {
+  const fromTranscript = tierFromTranscript(payload && payload.transcript_path);
+  if (fromTranscript && fromTranscript !== 'unknown') return fromTranscript;
+
   const sessionId = payload && payload.session_id;
   if (typeof sessionId === 'string' && SESSION_ID_RE.test(sessionId)) {
     try {
       const raw = fs.readFileSync(path.join(STATE_DIR, `${sessionId}.json`), 'utf8');
       const record = JSON.parse(raw);
-      if (record && typeof record.tier === 'string' && record.tier) return record.tier;
+      if (record && typeof record.tier === 'string' && record.tier && record.tier !== 'unknown') return record.tier;
     } catch {
       // Missing/unreadable/malformed — fall through to env classification.
     }
   }
   return classifyTier(process.env.ANTHROPIC_MODEL);
 }
+
+let currentTier = 'opus';
 
 function parseEnvInt(raw, fallback) {
   if (raw === undefined || raw === null || raw === '') return fallback;
@@ -158,9 +205,13 @@ function incrementRatchet(sessionKey) {
 }
 
 function denyOutput(targetPath, note) {
+  const head = currentTier === 'unknown'
+    ? 'OPUS CODE-WRITE BLOCKED (fail-closed): the session model could not be determined (no model in payload, transcript or record); ' +
+      'treating as opus. Code generation is delegated to a sonnet-coder subagent (AGENT-TIER DISCIPLINE). Target: '
+    : 'OPUS CODE-WRITE BLOCKED: opus is the architect; code generation is delegated to a ' +
+      'sonnet-coder subagent (AGENT-TIER DISCIPLINE). Target: ';
   let reason =
-    'OPUS CODE-WRITE BLOCKED: opus is the architect; code generation is delegated to a ' +
-    'sonnet-coder subagent (AGENT-TIER DISCIPLINE). Target: ' + targetPath + '. ' + note + ' ' +
+    head + targetPath + '. ' + note + ' ' +
     'Dispatch instead: Agent({ subagent_type: "sonnet-coder", model: "sonnet", prompt: ' +
     '"Edit <exact file>: <exact change>. Verify with: <exact command>." }) — state the exact ' +
     'file, exact change, and verification command in the brief ' +
@@ -226,6 +277,7 @@ function main() {
   if (!targetPath) return;
 
   const tier = resolveTier(payload);
+  currentTier = tier;
   if (tier === 'sonnet' || tier === 'haiku' || tier === 'fable') return;
 
   let mode;
