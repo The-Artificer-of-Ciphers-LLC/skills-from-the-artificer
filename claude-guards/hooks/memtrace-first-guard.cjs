@@ -1,5 +1,11 @@
 #!/usr/bin/env node
-// gsd-hook-version: 1.6.1
+// gsd-hook-version: 1.6.2
+//
+// 1.6.2 (2026-09-29): denial message only — states that in a git worktree
+//   get_source_window must be given the absolute path of the file in the agent's
+//   own checkout, because a relative path resolves against the indexed root and
+//   the returned resolved_path then never matches the Read target. Matching
+//   logic unchanged (still exact resolved_path + line range).
 //
 // 1.6.0 (2026-09-29, maintainer-instructed hardening; guards get STRICTER only):
 //   HOLE C (measured 2026-09-29): every file under
@@ -1187,6 +1193,10 @@ function denyOutput(reasonFragment, toolLabel) {
     'bin/ or other non-indexed dirs, and re-reading a span Memtrace already returned. ' +
     'Read on indexed source is allowed only for an offset/limit span that a prior ' +
     'mcp__memtrace__get_source_window call returned for this exact file (resolved_path + line range). ' +
+    'In a git worktree, pass get_source_window the ABSOLUTE path of the file in YOUR checkout as ' +
+    '`file_path`: a relative path resolves against the indexed repo root (often the main checkout), ' +
+    'so the returned resolved_path names a different file than the one you then Read and this ' +
+    'guard will deny the Read. ' +
     'Human escape: GSD_MEMTRACE_GUARD_OFF=1 must be exported in the shell that launches ' +
     'Claude Code. An inline command prefix does NOT work and is not self-issuable - this ' +
     'hook runs as its own process, so the pending command text is not in its environment.';

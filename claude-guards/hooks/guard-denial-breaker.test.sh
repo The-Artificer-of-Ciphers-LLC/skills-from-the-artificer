@@ -88,10 +88,39 @@ expect "tier-guard 'Dispatch instead' denial alone -> allow" allow "$(decision W
 T="$WORK/quote.jsonl"; mk "$T" "human:go" "toolok:the guard source says DO NOT REPHRASE and circumvention in a comment"
 expect "file content merely quoting a T1 phrase -> allow" allow "$(decision Bash "$T")"
 
+RS='denial:GUARD-BREAKER RESTART: a guard just denied an action; re-plan.'
 T="$WORK/t1.jsonl"
-expect "tripped + Write .gsd/phase/x/HALT.md -> allow" allow "$(decision Write "$T" '{"file_path":"/r/.gsd/phase/x/HALT.md","content":"h"}')"
-expect "tripped + Write elsewhere -> deny" deny "$(decision Write "$T" '{"file_path":"/r/src/a.cts","content":"h"}')"
-expect "tripped + Write HALT.md-lookalike -> deny" deny "$(decision Write "$T" '{"file_path":"/r/.gsd/phase/x/notHALT.md","content":"h"}')"
+expect "first trip + HALT.md write -> deny (interrupt is total for one call)" deny "$(decision Write "$T" '{"file_path":"/r/.gsd/phase/x/HALT.md","content":"h"}')"
+
+T="$WORK/ack1.jsonl"; mk "$T" "human:go" "denial:$DNR" "$RS"
+expect "trip then own restart denial -> next call allowed (Bash)" allow "$(decision Bash "$T")"
+expect "trip then own restart denial -> next call allowed (Agent)" allow "$(decision Agent "$T")"
+
+T="$WORK/ack2.jsonl"; mk "$T" "human:go" "denial:$DNR" "$RS" "toolok:ok" "denial:$CLF"
+expect "second NEW trip after an interrupt -> deny again" deny "$(decision Bash "$T")"
+
+T="$WORK/ack3.jsonl"; mk "$T" "human:go" "denial:$DNR" "$RS" "denial:$CLF" "$RS"
+expect "second trip acknowledged -> allow" allow "$(decision Bash "$T")"
+
+T="$WORK/selfquote.jsonl"; mk "$T" "human:go" "denial:GUARD-BREAKER RESTART: do not rephrase; circumvention; do not route around it"
+expect "sentinel message quoting T1 phrases never trips -> allow" allow "$(decision Bash "$T")"
+
+T="$WORK/handack.jsonl"; mk "$T" "human:go" "handback:BLOCKED: the hook denied my Bash call" "$RS" "handback:BLOCKED: the guard denied it again"
+expect "new subagent BLOCKED report after an interrupt -> deny" deny "$(decision Bash "$T")"
+
+T="$WORK/max4.jsonl"; mk "$T" "human:go" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "denial:$DNR"
+expect "4 interrupts then a 5th trip -> restart deny (not hard stop)" deny "$(decision Write "$T" '{"file_path":"/r/.gsd/phase/x/HALT.md","content":"h"}')"
+
+T="$WORK/max5.jsonl"; mk "$T" "human:go" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "denial:$DNR" "$RS"
+expect "5 interrupts in one human turn -> hard stop (Bash)" deny "$(decision Bash "$T")"
+expect "hard stop still allows HALT.md Write" allow "$(decision Write "$T" '{"file_path":"/r/.gsd/phase/x/HALT.md","content":"h"}')"
+expect "hard stop denies other Write" deny "$(decision Write "$T" '{"file_path":"/r/src/a.cts","content":"h"}')"
+expect "hard stop denies HALT.md lookalike" deny "$(decision Write "$T" '{"file_path":"/r/.gsd/phase/x/notHALT.md","content":"h"}')"
+
+T="$WORK/max5h.jsonl"; mk "$T" "human:go" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "human:ok continue"
+expect "human message resets the interrupt counter -> allow" allow "$(decision Bash "$T")"
+T="$WORK/max5h2.jsonl"; mk "$T" "human:go" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "human:ok continue" "denial:$DNR"
+expect "after human reset a new trip -> one restart interrupt" deny "$(decision Bash "$T")"
 
 T="$WORK/mid.jsonl"; mk "$T" "human:go" "denial:$DNR" "midturn:carry on, it is fine"
 expect "mid-turn 'user sent a new message' after denial -> allow" allow "$(decision Bash "$T")"
@@ -99,6 +128,33 @@ expect "mid-turn 'user sent a new message' after denial -> allow" allow "$(decis
 T="$WORK/bad.jsonl"; printf 'not json\n{"broken\n' > "$T"
 expect "malformed transcript -> allow" allow "$(decision Bash "$T")"
 expect "missing transcript file -> allow" allow "$(decision Bash "$WORK/nope.jsonl")"
+
+# Real harness shape: a hook denial is stored as "PreToolUse:<Tool> hook error: <text>".
+PRS='denial:PreToolUse:Read hook error: GUARD-BREAKER RESTART: a guard just denied an action; re-plan.'
+PRSB='denial:PreToolUse:Bash hook error: GUARD-BREAKER RESTART: a guard just denied an action; re-plan.'
+
+T="$WORK/pfx_a.jsonl"; mk "$T" "human:go" "denial:$DNR" "$PRS"
+expect "prefixed restart ack (Read) -> next call allowed" allow "$(decision Bash "$T")"
+T="$WORK/pfx_a2.jsonl"; mk "$T" "human:go" "denial:$DNR" "$PRSB"
+expect "prefixed restart ack (Bash) -> next call allowed" allow "$(decision Read "$T")"
+
+T="$WORK/pfx_b.jsonl"; mk "$T" "human:go" "denial:$DNR" "$PRS" "denial:$CLF"
+expect "prefixed ack then a NEW trip -> deny again" deny "$(decision Bash "$T")"
+T="$WORK/pfx_b2.jsonl"; mk "$T" "human:go" "denial:$DNR" "$PRS" "denial:$DNR" "$PRSB"
+expect "prefixed ack, new trip, second prefixed ack -> allow" allow "$(decision Bash "$T")"
+
+T="$WORK/pfx_c5.jsonl"; mk "$T" "human:go" "denial:$DNR" "$PRS" "denial:$DNR" "$PRSB" "denial:$DNR" "$PRS" "denial:$DNR" "$PRSB" "denial:$DNR" "$PRS"
+expect "5 prefixed acks in one human turn -> hard stop (Bash)" deny "$(decision Bash "$T")"
+expect "5 prefixed acks -> HALT.md Write still allowed" allow "$(decision Write "$T" '{"file_path":"/r/.gsd/phase/x/HALT.md","content":"h"}')"
+expect "5 prefixed acks -> other Write denied" deny "$(decision Write "$T" '{"file_path":"/r/src/a.cts","content":"h"}')"
+T="$WORK/pfx_c4.jsonl"; mk "$T" "human:go" "denial:$DNR" "$PRS" "denial:$DNR" "$PRSB" "denial:$DNR" "$PRS" "denial:$DNR" "$PRSB"
+expect "4 prefixed acks -> still allowed" allow "$(decision Bash "$T")"
+
+T="$WORK/pfx_d.jsonl"; mk "$T" "human:go" "denial:PreToolUse:Read hook error: GUARD-BREAKER RESTART: do not rephrase; circumvention; do not route around it"
+expect "prefixed restart text quoting T1 phrases never trips -> allow" allow "$(decision Bash "$T")"
+
+T="$WORK/pfx_e.jsonl"; mk "$T" "human:go" "denial:PreToolUse:Bash hook error: GUARD-BREAKER HALT: do not work around this; safety bypass; circumvention"
+expect "prefixed HALT text quoting T1 phrases never trips -> allow" allow "$(decision Bash "$T")"
 
 T="$WORK/t1.jsonl"
 N=$((N+1))
@@ -110,7 +166,18 @@ if [ -s "$WORK/home/.claude/logs/guard-denial-breaker.jsonl" ]; then echo "PASS 
 
 N=$((N+1))
 R=$(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Bash","tool_input":{},"transcript_path":sys.argv[1]}))' "$WORK/t1.jsonl" | HOME="$WORK/home" node "$GUARD" 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin)["hookSpecificOutput"]["permissionDecisionReason"])')
-case "$R" in GUARD-DENIAL\ BREAKER*"Stop and tell the user"*) echo "PASS  deny reason text";; *) F=$((F+1)); echo "FAIL  reason -> $R";; esac
+case "$R" in "GUARD-BREAKER RESTART:"*"Do not report this to the user"*"different step"*) echo "PASS  restart reason text";; *) F=$((F+1)); echo "FAIL  reason -> $R";; esac
+
+N=$((N+1))
+LOW=$(printf '%s' "$R" | tr 'A-Z' 'a-z')
+case "$LOW" in *"do not rephrase"*|*"do not route around"*|*circumvention*|*"safety bypass"*|*"do not work around"*|*"denied by the claude code auto mode classifier"*) F=$((F+1)); echo "FAIL  restart text contains a T1 phrase";; *) echo "PASS  restart text has no T1 phrase";; esac
+
+N=$((N+1))
+R=$(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Bash","tool_input":{},"transcript_path":sys.argv[1]}))' "$WORK/max5.jsonl" | HOME="$WORK/home" node "$GUARD" 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin)["hookSpecificOutput"]["permissionDecisionReason"])')
+case "$R" in "GUARD-BREAKER HALT:"*"short factual summary"*) echo "PASS  backstop reason text";; *) F=$((F+1)); echo "FAIL  backstop reason -> $R";; esac
+
+N=$((N+1))
+if grep -q '"kind":"backstop"' "$WORK/home/.claude/logs/guard-denial-breaker.jsonl" && grep -q '"kind":"restart"' "$WORK/home/.claude/logs/guard-denial-breaker.jsonl"; then echo "PASS  restart and backstop are logged"; else F=$((F+1)); echo "FAIL  log kinds missing"; fi
 
 echo
 echo "guard-denial-breaker suite: $((N-F))/$N passed"
