@@ -260,6 +260,63 @@ const rel = repoRelative(targetPath);
 
 const isEdit = toolName === 'Edit' || toolName === 'Write' || toolName === 'NotebookEdit';
 
+// -- Artificer-laws honesty check (bug diagnosis) ---------------------------
+// The diagnosis template demands a `## Laws that apply` section produced by the
+// /skills-from-the-artificer dispatcher. Existence alone is not evidence: past runs
+// wrote the section from memory (coined "laws" that are not in the collection, or
+// "dispatching conceptually") without ever calling the skill. Two checks:
+//   1. content — the section's bold law names must come from the 24-law collection
+//      (or the section must say `None fire`);
+//   2. transcript — when the session transcript is readable, it must contain a real
+//      Skill call to the dispatcher. An unreadable transcript skips only this arm.
+const ARTIFICER_LAWS = new Set([
+  'hyrums-law', 'postels-law', 'kerckhoffs-principle', 'kernighans-law',
+  'knuths-optimization-principle', 'wirths-law', 'moores-law', 'greenspuns-tenth-rule',
+  'leaky-abstractions', 'choose-boring-technology', 'galls-law', 'conways-law',
+  'linuss-law', 'goodharts-law', 'hofstadters-law', 'parkinsons-law', 'zawinskis-law',
+  'peter-principle', 'doerrs-law', 'shirky-principle', 'cunninghams-law', 'fitts-law',
+  'lady-lovelaces-objection', 'norvigs-law',
+]);
+
+/** Returns a problem string, or '' when the Laws section is honest. */
+function lawsSectionProblem(diagnosisPath) {
+  let body;
+  try { body = fs.readFileSync(diagnosisPath, 'utf8'); } catch { return ''; }
+  const m = body.match(/^##\s+Laws that apply[^\n]*\n([\s\S]*?)(?=^##\s|\s*$(?![\s\S]))/m);
+  const section = m ? m[1].trim() : '';
+  if (!section) return 'the `## Laws that apply` section is missing or empty';
+  if (/^\s*none fire\b/im.test(section)) return '';
+  const names = [...section.matchAll(/\*\*`?([A-Za-z][\w'-]*)`?\*\*/g)]
+    .map((x) => x[1].toLowerCase());
+  if (!names.some((n) => ARTIFICER_LAWS.has(n))) {
+    return 'the section names no law from the 24-law Artificer collection (and does not say `None fire`)';
+  }
+  const foreign = names.filter((n) => !ARTIFICER_LAWS.has(n)
+    && /(-law|-principle|-rule|-objection)$/.test(n));
+  if (foreign.length) {
+    return `the section names "${foreign[0]}", which is not one of the 24 Artificer laws`;
+  }
+  return '';
+}
+
+/** True/false when the transcript is readable; null when it cannot be inspected. */
+function transcriptCalledDispatcher(transcriptPath) {
+  if (!transcriptPath) return null;
+  let text;
+  try { text = fs.readFileSync(String(transcriptPath), 'utf8'); } catch { return null; }
+  for (const line of text.split('\n')) {
+    if (!line.includes('skills-from-the-artificer') || !line.includes('Skill')) continue;
+    try {
+      const d = JSON.parse(line);
+      const c = d && d.message && d.message.content;
+      if (!Array.isArray(c)) continue;
+      if (c.some((b) => b && b.type === 'tool_use' && b.name === 'Skill'
+        && b.input && b.input.skill === 'skills-from-the-artificer')) return true;
+    } catch { /* not a JSON line */ }
+  }
+  return false;
+}
+
 // The gate must never block writing the artifacts it demands, the directive
 // itself, or the hooks — that would be unrecoverable.
 const EXEMPT = /^(\.gsd\/|\.claude\/)/;
@@ -304,6 +361,25 @@ if (isEdit && rel && !EXEMPT.test(rel)) {
       'the first thing that came to mind.\n' +
       ESCAPE,
     );
+  }
+
+  if (bugArmed && isSrc && hasBug('10-diagnosis.md')) {
+    const problem = lawsSectionProblem(path.join(bugDir, '10-diagnosis.md'));
+    const called = transcriptCalledDispatcher(payload.transcript_path);
+    if (problem || called === false) {
+      deny(
+        `BUG GATE — the Artificer-laws step is not honest, so this edit to ${rel} is blocked.\n\n` +
+        `File: .gsd/bug/${slug}/10-diagnosis.md\n` +
+        (problem ? `Problem: ${problem}.\n` : '') +
+        (called === false ? 'Problem: this session made no `Skill` call to /skills-from-the-artificer.\n' : '') +
+        '\nRun the dispatcher for real and paste its block:\n' +
+        '  Skill(skill: "skills-from-the-artificer", args: "<one-sentence root cause> + <files/symbols> + preset: bugfix-review")\n' +
+        'Then replace the `## Laws that apply` section with the returned block. Law names must be ' +
+        'from the 24-law collection (e.g. hyrums-law, postels-law); a principle you coin or recall ' +
+        'is not one. If genuinely nothing fires, the block says `None fire — <reason>`.\n' +
+        ESCAPE,
+      );
+    }
   }
 
   if ((phaseArmed || bugArmed) && isTest) {

@@ -222,7 +222,7 @@ Cite verbatim:
    - **Check whether this is the same fix again.** Run `mcp__memtrace__get_timeline` on each changed symbol (`scope_path` + `file_path`) for its full version history across every episode, with an AST hash per point that separates structural change from whitespace. A symbol repeatedly patched in the same region — or patched, reverted, and patched again — is evidence the earlier fixes treated symptoms. Pair with `mcp__memtrace__find_hotspots` (complexity × recent churn): the PR landing on an existing hotspot means the fix has to hold in code that is already where the next bug lives, and "it passes CI" is a weaker signal there.
 4. **Regression-test discipline:** Cite: `RULESET.TESTS.regression-must-fail-first=...`. Prove it: run the new test against the base branch (must FAIL), then against the PR branch (must PASS).
 5. `/qa-test-architect` — evaluate boundary and architectural quality.
-6. `/skills-from-the-artificer` — cross-reference installed software laws.
+6. `/skills-from-the-artificer` — a real `Skill` call with `args` = one-sentence root cause + the changed files/symbols + `preset: bugfix-review`. Cite the returned `## Laws that apply` block in the review body; law names must come from the 24-law collection, not from recollection.
 7. `/code-review` — then run **the Deterministic Review Pass** (defined once below, under §3D). It is not optional and not a summary of `/code-review`; it is the graph-backed half that a diff-only reviewer structurally cannot produce.
 8. `/security-review`
 9. **Isolated adversarial pass:** spawn a fresh reviewer subagent that did NOT author any change, with no prior context, to re-review independently. (This is the Claude Code equivalent of `/codex:adverserial-review` and satisfies the "≥1 review in an isolated reviewer context" rule.)
@@ -236,7 +236,7 @@ Cite verbatim:
 5. `/security-review`
 6. **Isolated adversarial pass** (fresh subagent, as in 3A.9).
 7. `/code-review` — plus **the Deterministic Review Pass** (§3D), identical to the Bug-Fix track's §3A.7.
-8. `/rubber-duck` & `/skills-from-the-artificer` — walk through the implementation. Invoke `/codebase-design`, `/memtrace-skills:memtrace-change-impact-analysis`, and the Artificer Laws.
+8. `/rubber-duck` & `/skills-from-the-artificer` — walk through the implementation. Invoke `/codebase-design`, `/memtrace-skills:memtrace-change-impact-analysis`, and the Artificer Laws via a real `/skills-from-the-artificer` `Skill` call (`args` = the PR's one-sentence design + changed files/symbols + `preset: design-review`); cite its `## Laws that apply` block in the review body.
 
 ### 3D. The Deterministic Review Pass (invoked by §3A.7 and §3B.7)
 **[BLOCKING]** *No LLM in this path — AST detectors, a 315-rule multi-language YAML pack, and cross-module graph checks, all local. Its findings are evidence, not opinion, and they land in §8 as such.*
