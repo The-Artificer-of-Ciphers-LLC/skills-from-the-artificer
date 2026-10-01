@@ -71,10 +71,10 @@ T="$WORK/wrapperonly.jsonl"; mk "$T" "human:go" "denial:$DNR" "wrapper:some remi
 expect "system-reminder wrapper is NOT a human message -> still deny" deny "$(decision Bash "$T")"
 
 T="$WORK/t2.jsonl"; mk "$T" "human:go" "handback:BLOCKED: the hook denied my Bash call"
-expect "T2 subagent BLOCKED hand-back (queue-operation) -> deny" deny "$(decision Bash "$T")"
+expect "a subagent BLOCKED hand-back (queue-operation) is NOT a trip -> allow" allow "$(decision Bash "$T")"
 
 T="$WORK/t2b.jsonl"; mk "$T" "human:go" "agentcall:" "agentres:Denied by the guard hook; nothing was edited."
-expect "T2 Agent tool_result reporting a hook denial -> deny" deny "$(decision Read "$T")"
+expect "an Agent tool_result reporting a hook denial is NOT a trip -> allow" allow "$(decision Read "$T")"
 
 T="$WORK/t2c.jsonl"; mk "$T" "human:go" "toolok:npm hook: permission denied for the guard agent"
 expect "ordinary tool output mentioning denied+hook is NOT a T2 -> allow" allow "$(decision Bash "$T")"
@@ -106,7 +106,7 @@ T="$WORK/selfquote.jsonl"; mk "$T" "human:go" "denial:GUARD-BREAKER RESTART: do 
 expect "sentinel message quoting T1 phrases never trips -> allow" allow "$(decision Bash "$T")"
 
 T="$WORK/handack.jsonl"; mk "$T" "human:go" "handback:BLOCKED: the hook denied my Bash call" "$RS" "handback:BLOCKED: the guard denied it again"
-expect "new subagent BLOCKED report after an interrupt -> deny" deny "$(decision Bash "$T")"
+expect "a new subagent BLOCKED report after an interrupt is still NOT a trip -> allow" allow "$(decision Bash "$T")"
 
 T="$WORK/max4.jsonl"; mk "$T" "human:go" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "denial:$DNR" "$RS" "denial:$DNR"
 expect "4 interrupts then a 5th trip -> restart deny (not hard stop)" deny "$(decision Write "$T" '{"file_path":"/r/.gsd/phase/x/HALT.md","content":"h"}')"

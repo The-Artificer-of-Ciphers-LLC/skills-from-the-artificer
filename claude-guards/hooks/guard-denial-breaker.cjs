@@ -171,16 +171,10 @@ function looksLikeDenialText(text) {
 function tripText(d, agentIds) {
   if (!d || typeof d !== 'object') return null;
 
-  // T2 via queue-operation / attachment carrying an agent hand-back.
-  let handBack = null;
-  if (d.type === 'queue-operation' && typeof d.content === 'string' && d.content.includes('<agent-message from=')) {
-    handBack = d.content;
-  } else if (d.type === 'attachment' && Array.isArray(d.rendered)) {
-    const r = d.rendered.map((x) => (x && x.content) || '').join('\n');
-    if (r.includes('<agent-message from=')) handBack = r;
-  }
-  if (handBack && isBlockedReport(handBack)) return handBack;
-
+  // A subagent HAND-BACK is never a trip (user instruction 2026-10-01: "stop counting a hand-back
+  // as a denial"). Review and research reports routinely quote the words "denied"/"blocked" and
+  // "hook"/"guard" while describing code, and tripping on them interrupted whole runs. Only a real
+  // hook/classifier denial in THIS session's own tool_results (T1, below) trips the breaker.
   if (d.type !== 'user') return null;
   const c = d.message && d.message.content;
   if (!Array.isArray(c)) return null;
@@ -191,8 +185,7 @@ function tripText(d, agentIds) {
     if (b.is_error === true || looksLikeDenialText(text)) {
       if (findT1Phrase(text)) return text;
     }
-    // T2 via Agent / SendMessage tool_result carrying a blocked report.
-    if (agentIds && agentIds.has(b.tool_use_id) && isBlockedReport(text)) return text;
+    // (An Agent / SendMessage tool_result is a hand-back too: never a trip, see above.)
   }
   return null;
 }
