@@ -68,7 +68,15 @@ async function main() {
       permissionDecisionReason:
         type + ' has no Memtrace tools, so it cannot follow the Memtrace-first read rule in gsd-core. ' +
         'Dispatch subagent_type "general-purpose" with model "sonnet" and brief it to read source only via ' +
-        'mcp__memtrace__get_source_window (Read only on a span Memtrace returned).',
+        'mcp__memtrace__get_source_window (Read only on a span Memtrace returned). ' +
+        // CodeGraph fallback when Memtrace is unavailable / quota-exhausted. Citations:
+        // https://github.com/colbymchenry/codegraph @6560052 README.md:486 (subagents never see MCP
+        // guidance and use the `codegraph explore` CLI), :539 (`codegraph node <symbol|file>` reads a
+        // file with line numbers), :541-543 (callers/callees/impact CLI), :537 (`query`).
+        'If Memtrace is unavailable / quota-exhausted, brief the subagent to use the CodeGraph CLI via ' +
+        'Bash instead: `codegraph query <sym>` (find_symbol), `codegraph explore <q>` (find_code), ' +
+        '`codegraph node <file|sym>` (get_source_window / get_symbol_context), `codegraph callers|callees|' +
+        'impact <sym>` (get_impact). Never grep/cat indexed source.',
     },
   }));
 }

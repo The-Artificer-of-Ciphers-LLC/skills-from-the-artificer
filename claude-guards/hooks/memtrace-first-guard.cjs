@@ -1169,6 +1169,43 @@ function allowOutput() {
   }));
 }
 
+// CodeGraph equivalent of EACH Memtrace tool the deny text prescribes. Used when
+// Memtrace is unavailable / quota-exhausted. CodeGraph is NOT explore-only.
+// Every claim is cited to the upstream README, pinned to commit 6560052 of
+// https://github.com/colbymchenry/codegraph (README.md line numbers below), and
+// to `codegraph --help` for the installed v1.6.0.
+//   README.md:584-588  MCP surface lists ONLY codegraph_explore by default.
+//   README.md:590      codegraph_node/search/callers/callees/impact/files/status are
+//                      "unlisted by default" but "fully functional"; re-enable via the
+//                      CODEGRAPH_MCP_TOOLS env var, "or use their CLI equivalents".
+//   README.md:537-543  CLI: query, explore, node, files, callers, callees, impact.
+//   README.md:544      CLI: `affected [files...]` = test files affected by a change.
+//   README.md:482      codegraph_explore: "Name a file or symbol in the query to read
+//                      its current line-numbered source" (= Read-shaped output).
+//   README.md:539      `codegraph node <symbol|file>`: "or read a file with line numbers".
+//   README.md:592      MCP `projectPath` arg targets another indexed project/repo.
+//   README.md:486      subagents never see MCP guidance; they use the `codegraph explore` CLI.
+//   `codegraph context <task>` (CLI --help v1.6.0): task-scoped symbols + code blocks.
+// There is NO CodeGraph equivalent of get_evolution / recall_decision (history and
+// decision memory); those have no fallback, so do not substitute grep/git log.
+const CODEGRAPH_FALLBACK_TEXT =
+  'NO mcp__memtrace__* TOOLS, or Memtrace unavailable / quota-exhausted? Use CodeGraph, which ' +
+  'indexes the same repository, returns verbatim line-numbered source and has no monthly quota. ' +
+  'Pick the equivalent of the Memtrace tool you would have used (do NOT use codegraph_explore for ' +
+  'every action):\n' +
+  '  find_symbol (exact name)        -> CLI `codegraph query <symbol>` [README.md:537, :590]\n' +
+  '  find_code (NL/concept)          -> mcp__codegraph__codegraph_explore "<question>" or CLI `codegraph explore <query>` [README.md:482, :538, :588]\n' +
+  '  get_source_window (bounded read)-> CLI `codegraph node -f <file> --offset <1-based start> --limit <max lines>` (bounded span with line numbers) or codegraph_explore naming the file/symbol [README.md:539, :482; `codegraph node --help` v1.6.0; docs/research/codegraph-fallback-equivalents.md]\n' +
+  '  get_symbol_context (one symbol) -> CLI `codegraph node <symbol>`, `codegraph callers <symbol>`, `codegraph callees <symbol>` [README.md:539, :541, :542]\n' +
+  '  get_impact (blast radius)       -> CLI `codegraph impact <symbol>` (--depth N); tests: `codegraph affected <files...>` [README.md:543, :544]\n' +
+  '  task context bundle             -> CLI `codegraph context "<task>"` [codegraph --help v1.6.0]\n' +
+  'The MCP surface lists ONLY codegraph_explore by default; the narrower tools (codegraph_node/search/' +
+  'callers/callees/impact/files) exist only if CODEGRAPH_MCP_TOOLS enables them, so the CLI is the ' +
+  'always-available route [README.md:584-590]. Pass `projectPath` (MCP) or `--path` (CLI) to target a ' +
+  'worktree or second repo [README.md:592]. Subagents use the CLI forms [README.md:486]. ' +
+  'This is the prescribed fallback — NOT a reason to fall back to grep. ' +
+  'get_evolution / recall_decision have no CodeGraph equivalent. ';
+
 function denyOutput(reasonFragment, toolLabel) {
   let reason =
     'DO NOT REPHRASE THIS COMMAND TO GET PAST THIS GUARD.\n' +
@@ -1179,13 +1216,7 @@ function denyOutput(reasonFragment, toolLabel) {
     'Use Memtrace instead: mcp__memtrace__find_symbol (exact symbol -> file:start:end), ' +
     'find_code (NL/concept search), get_source_window (bounded span read), ' +
     'get_symbol_context / get_impact (callers, blast radius). ' +
-    'NO mcp__memtrace__* TOOLS, or Memtrace unavailable / quota-exhausted? Use the CodeGraph \n' +
-    'MCP server instead. It indexes the same repository, returns verbatim line-numbered \n' +
-    'source, and has no monthly quota: \n' +
-    '  mcp__codegraph__codegraph_explore — name a symbol, file, or question; returns the \n' +
-    '    relevant source plus the call paths between those symbols. \n' +
-    'That is the prescribed fallback — NOT a reason to fall back to grep. Both graphs are \n' +
-    'reached over MCP ONLY; there is no supported CLI for either. ' +
+    CODEGRAPH_FALLBACK_TEXT +
     'CAVEAT: in a git worktree, brand-new symbols live in an overlay. ONLY find_code takes a ' +
     '`worktree` param — find_symbol / get_symbol_context / get_impact do NOT, so a miss from ' +
     'those is not proof of absence; re-ask find_code({repo_id, query, worktree}). ' +
