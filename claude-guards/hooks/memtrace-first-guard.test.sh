@@ -685,6 +685,13 @@ check "1.6.1 (f) subagent Read with offset but no limit -> deny" "$DENY_CHECK"
 rm -rf "$SUB_ROOT"
 rm -f "$SPAN_T"
 
+# 1.7.0: deny text carries a per-tool CodeGraph CLI/MCP equivalent (README.md citations).
+CG_OUT=$(printf '%s' "{\"tool_name\":\"Read\",\"cwd\":\"$REAL_REPO\",\"tool_input\":{\"file_path\":\"$REAL_REPO/src/foo.cts\"}}" | GSD_MEMTRACE_GUARD_LOG=0 node "$GUARD" 2>/dev/null)
+for needle in 'codegraph query' 'codegraph node' 'codegraph callers' 'codegraph callees' 'codegraph impact' 'codegraph affected' 'codegraph explore' 'README.md:'; do
+  if printf '%s' "$CG_OUT" | grep -qF "$needle"; then pass "1.7.0 deny text names: $needle"; else fail "1.7.0 deny text names: $needle" "missing"; fi
+done
+if printf '%s' "$CG_OUT" | grep -qF 'there is no supported CLI'; then fail "1.7.0 stale 'no CLI' claim removed" "still present"; else pass "1.7.0 stale 'no CLI' claim removed"; fi
+
 echo
 echo "memtrace-first-guard suite: $((N-F))/$N passed"
 [ $F -eq 0 ] && exit 0 || exit 1
