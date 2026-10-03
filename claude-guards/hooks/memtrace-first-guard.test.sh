@@ -637,6 +637,49 @@ spanread '{"offset":120}' "$WT_FILE"
 check "1.6.0 SPAN: offset without limit -> deny" "$DENY_CHECK"
 spanread '{"offset":120,"limit":5}' "$REAL_REPO/scripts/ci-timeout-report.cjs"
 check "1.6.0 SPAN: different file, same basename -> deny" "$DENY_CHECK"
+echo "=== 1.7.1: codegraph_node FILE-mode read counts as the read ==="
+CG_T=$(mktemp)
+# cgtr <transcript> <tool_use input json> <result text>
+cgtr() {
+  python3 - "$1" "$2" "$3" <<'PY'
+import json,sys
+out,inp,txt=sys.argv[1],json.loads(sys.argv[2]),sys.argv[3]
+a={"type":"assistant","message":{"content":[{"type":"tool_use","id":"c1","name":"mcp__codegraph__codegraph_node","input":inp}]}}
+u={"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"c1","content":[{"type":"text","text":txt}]}]}}
+open(out,"w").write(json.dumps(a)+"\n"+json.dumps(u)+"\n")
+PY
+}
+CG_PART=$'**scripts/ci-timeout-report.cjs** \xe2\x80\x94 300 lines, 4 symbols\n\n100\tx\n\n(lines 100\xe2\x80\x93150 of 300 \xe2\x80\x94 pass `offset`/`limit` for another range)'
+CG_WHOLE=$'**scripts/ci-timeout-report.cjs** \xe2\x80\x94 300 lines, 4 symbols\n\n1\tx'
+cgread() { # cgread <file> <cwd> <extra-json>
+  run "$(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Read","tool_input":dict({"file_path":sys.argv[1]},**json.loads(sys.argv[3])),"cwd":sys.argv[2],"transcript_path":sys.argv[4]}))' "$1" "$2" "$3" "$CG_T")"
+}
+cgtr "$CG_T" "{\"file\":\"scripts/ci-timeout-report.cjs\",\"offset\":100,\"limit\":51,\"projectPath\":\"$WT_A\"}" "$CG_PART"
+cgread "$WT_FILE" "$WT_A" '{"offset":100,"limit":51}'
+check "1.7.1 CG: worktree file, projectPath=worktree, span inside footer range -> allow" "$ALLOW_CHECK"
+cgread "$WT_FILE" "$WT_A" '{"offset":100,"limit":52}'
+check "1.7.1 CG: end = footer end+1 -> deny" "$DENY_CHECK"
+cgread "$WT_FILE" "$WT_A" '{"offset":99,"limit":10}'
+check "1.7.1 CG: offset = footer start-1 -> deny" "$DENY_CHECK"
+cgread "$WT_FILE" "$WT_A" '{}'
+check "1.7.1 CG: no offset/limit -> deny" "$DENY_CHECK"
+cgread "$REAL_REPO/scripts/ci-timeout-report.cjs" "$WT_A" '{"offset":120,"limit":5}'
+check "1.7.1 CG: same relative path, DIFFERENT checkout than projectPath -> deny" "$DENY_CHECK"
+cgtr "$CG_T" '{"file":"scripts/ci-timeout-report.cjs","offset":100,"limit":51}' "$CG_PART"
+cgread "$WT_FILE" "$WT_A" '{"offset":120,"limit":5}'
+check "1.7.1 CG: linked worktree WITHOUT projectPath -> deny" "$DENY_CHECK"
+cgread "$REAL_REPO/scripts/ci-timeout-report.cjs" "$REAL_REPO" '{"offset":120,"limit":5}'
+check "1.7.1 CG: main checkout WITHOUT projectPath, span inside -> allow" "$ALLOW_CHECK"
+cgtr "$CG_T" "{\"file\":\"scripts/ci-timeout-report.cjs\",\"symbol\":\"foo\",\"projectPath\":\"$WT_A\"}" "$CG_PART"
+cgread "$WT_FILE" "$WT_A" '{"offset":120,"limit":5}'
+check "1.7.1 CG: symbol mode is not a file read -> deny" "$DENY_CHECK"
+cgtr "$CG_T" "{\"file\":\"scripts/ci-timeout-report.cjs\",\"projectPath\":\"$WT_A\"}" "$CG_WHOLE"
+cgread "$WT_FILE" "$WT_A" '{"offset":1,"limit":300}'
+check "1.7.1 CG: whole-file read (no footer), full range -> allow" "$ALLOW_CHECK"
+cgread "$WT_FILE" "$WT_A" '{"offset":1,"limit":301}'
+check "1.7.1 CG: whole-file read, limit = total+1 -> deny" "$DENY_CHECK"
+rm -f "$CG_T"
+
 echo "=== 1.6.1: subagent transcript span carve-out (payload.agent_id) ==="
 SUB_ROOT=$(mktemp -d)
 SUB_S1="$SUB_ROOT/proj/sess-1111"; SUB_S2="$SUB_ROOT/proj/sess-2222"
