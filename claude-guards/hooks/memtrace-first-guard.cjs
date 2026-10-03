@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 // gsd-hook-version: 1.6.2
 //
+// 1.7.1 (2026-10-03): the Read carve-out also accepts a span returned by CodeGraph's
+//   codegraph_node in FILE mode (see CODEGRAPH_NODE_TOOL), so the CodeGraph fallback can
+//   supply the read that a later Read/Edit needs when Memtrace is unavailable. Exact on the
+//   resolved path; projectPath is required in a linked worktree. 10 new test cases.
+//
 // 1.6.2 (2026-09-29): denial message only — states that in a git worktree
 //   get_source_window must be given the absolute path of the file in the agent's
 //   own checkout, because a relative path resolves against the indexed root and
@@ -583,6 +588,59 @@ function checkRead(input, cwd, toplevel) {
   return `target path "${fp}" is an indexed source file`;
 }
 
+// 1.7.1: CodeGraph's `codegraph_node` in FILE mode is the Read-equivalent that counts as the
+// read for a later Read/Edit when Memtrace is unavailable. Facts, from the installed
+// CodeGraph v1.6.0 dist/mcp/tools.js (`codegraph_node` inputSchema) and upstream
+// colbymchenry/codegraph @6560052 README.md:539 + docs/research/codegraph-fallback-equivalents.md:
+//   - input `file` (path/basename) with NO `symbol` = file mode; `offset` (1-based) and `limit` are
+//     "exactly like Read's"; omitted limit = whole file, capped at 2000 lines;
+//   - the result starts `**<repo-relative path>** — N lines ...` and, for a partial read, ends
+//     `(lines A–B of N ...)` (en dash);
+//   - `projectPath` selects the indexed project (README.md:592).
+// Coverage is exact on the resolved path: root = projectPath when given, else the file's own git
+// toplevel, and in a LINKED WORKTREE projectPath is REQUIRED (an MCP server rooted at the main
+// checkout would otherwise have read a different file than the one being Read/Edited).
+const CODEGRAPH_NODE_TOOL = 'mcp__codegraph__codegraph_node';
+const CODEGRAPH_FILE_CAP = 2000;
+
+function codegraphNodeCovers(input, text, target, offset, end) {
+  try {
+    if (!input || typeof input !== 'object') return false;
+    if (typeof input.symbol === 'string' && input.symbol) return false; // symbol mode is not a file read
+    if (typeof input.file !== 'string' || !input.file) return false;
+    const head = text.match(/^\*\*(.+?)\*\*\s+[—-]\s+(\d+) lines/);
+    if (!head) return false;
+    const relPath = head[1];
+    const total = Number(head[2]);
+    const real = (p) => { try { return fs.realpathSync(p); } catch { return path.normalize(p); } };
+    let root = null;
+    if (typeof input.projectPath === 'string' && input.projectPath) {
+      root = real(input.projectPath);
+    } else {
+      const top = toplevelContaining(target);
+      let isLinkedWorktree = true;
+      try { isLinkedWorktree = !fs.statSync(path.join(top || '', '.git')).isDirectory(); } catch { /* unknown -> strict */ }
+      if (!top || isLinkedWorktree) return false;
+      root = top;
+    }
+    if (real(path.resolve(root, relPath)) !== target) return false;
+    let start;
+    let last;
+    const m = text.match(/\(lines (\d+)[–-](\d+) of \d+/);
+    if (m) {
+      start = Number(m[1]);
+      last = Number(m[2]);
+    } else {
+      // No footer: the whole file was returned, up to Read's 2000-line cap.
+      start = 1;
+      last = Math.min(total, CODEGRAPH_FILE_CAP);
+    }
+    return start <= offset && end <= last;
+  } catch {
+    return false;
+  }
+}
+
 // 1.6.0: span-exact Read carve-out. A Read of indexed source is allowed only
 // when it carries a numeric offset AND limit and that span lies fully inside a
 // span that a prior mcp__memtrace__get_source_window call returned for this
@@ -610,12 +668,15 @@ function memtraceSpanCovers(transcriptPath, absPath, offset, limit) {
     const real = (p) => { try { return fs.realpathSync(p); } catch { return path.normalize(p); } };
     const target = real(absPath);
     const lines = text.split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } });
-    const ids = new Set();
+    // id -> tool_use block, for the two span-returning read tools: Memtrace's
+    // get_source_window and (1.7.1) CodeGraph's codegraph_node in FILE mode.
+    const ids = new Map();
     for (const d of lines) {
       const c = d && d.message && d.message.content;
       if (!Array.isArray(c)) continue;
       for (const b of c) {
-        if (b && b.type === 'tool_use' && b.name === 'mcp__memtrace__get_source_window' && b.id) ids.add(b.id);
+        if (!b || b.type !== 'tool_use' || !b.id) continue;
+        if (b.name === 'mcp__memtrace__get_source_window' || b.name === CODEGRAPH_NODE_TOOL) ids.set(b.id, b);
       }
     }
     if (!ids.size) return false;
@@ -625,8 +686,14 @@ function memtraceSpanCovers(transcriptPath, absPath, offset, limit) {
       if (!Array.isArray(c)) continue;
       for (const b of c) {
         if (!b || b.type !== 'tool_result' || !ids.has(b.tool_use_id) || !Array.isArray(b.content)) continue;
+        const use = ids.get(b.tool_use_id);
         for (const t of b.content) {
-          if (!t || t.type !== 'text' || typeof t.text !== 'string' || !t.text.startsWith('{')) continue;
+          if (!t || t.type !== 'text' || typeof t.text !== 'string') continue;
+          if (use.name === CODEGRAPH_NODE_TOOL) {
+            if (codegraphNodeCovers(use.input, t.text, target, offset, end)) return true;
+            continue;
+          }
+          if (!t.text.startsWith('{')) continue;
           let o;
           try { o = JSON.parse(t.text); } catch { continue; }
           if (!o || typeof o.resolved_path !== 'string') continue;
@@ -1223,7 +1290,9 @@ function denyOutput(reasonFragment, toolLabel) {
     'NOT blocked: prose/config .md/.json/.yml/.toml, file-inventory counts, anything under ' +
     'bin/ or other non-indexed dirs, and re-reading a span Memtrace already returned. ' +
     'Read on indexed source is allowed only for an offset/limit span that a prior ' +
-    'mcp__memtrace__get_source_window call returned for this exact file (resolved_path + line range). ' +
+    'mcp__memtrace__get_source_window call returned for this exact file (resolved_path + line range), ' +
+    'or that a prior mcp__codegraph__codegraph_node FILE-mode call returned (`file` + `offset`/`limit`, no `symbol`; ' +
+    'in a linked worktree you MUST pass `projectPath` = the worktree root). ' +
     'In a git worktree, pass get_source_window the ABSOLUTE path of the file in YOUR checkout as ' +
     '`file_path`: a relative path resolves against the indexed repo root (often the main checkout), ' +
     'so the returned resolved_path names a different file than the one you then Read and this ' +
