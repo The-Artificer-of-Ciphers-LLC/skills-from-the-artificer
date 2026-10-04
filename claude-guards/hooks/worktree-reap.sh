@@ -9,6 +9,11 @@
 #   1. its branch is fully merged into the repo's default branch
 #   2. its working tree is clean (git status --porcelain is empty)
 #   3. it is not locked
+# It additionally skips any worktree that may be IN USE: a live process whose
+# cwd is inside it, or recent activity (HEAD/index/logs touched within
+# WORKTREE_REAP_MIN_AGE_SECONDS, default 86400). A freshly created worktree is
+# trivially "merged" (its branch sits at the default branch tip) and clean, so
+# without this check every hook run reaped the worktrees of live sessions.
 # It never touches the main checkout, a detached-HEAD worktree, the
 # default branch itself, or any worktree outside <toplevel>/.claude/worktrees/.
 #
@@ -17,10 +22,21 @@
 
 set -u
 
-REAP_LOG="/Users/trekkie/.claude/hooks/worktree-reap.log"
+REAP_LOG="${WORKTREE_REAP_LOG:-$HOME/.claude/hooks/worktree-reap.log}"
 
 # Consume any hook JSON on stdin without requiring it.
 cat >/dev/null 2>&1 || true
+
+# Newest mtime (epoch seconds) among the files git touches when a worktree is used.
+newest_activity() {
+    local gitdir="$1" f m best=0
+    for f in HEAD index ORIG_HEAD logs/HEAD; do
+        [ -e "$gitdir/$f" ] || continue
+        m="$(stat -f %m "$gitdir/$f" 2>/dev/null || stat -c %Y "$gitdir/$f" 2>/dev/null || echo 0)"
+        [ "$m" -gt "$best" ] 2>/dev/null && best="$m"
+    done
+    echo "$best"
+}
 
 main() {
     local toplevel
@@ -49,6 +65,12 @@ main() {
     local porcelain
     porcelain="$(git -C "$toplevel" worktree list --porcelain 2>/dev/null)" || return 0
     [ -n "$porcelain" ] || return 0
+
+    # Directories that are the cwd of a live process (one lsof call for all worktrees).
+    local live_cwds
+    live_cwds="$(lsof -a -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')" || live_cwds=""
+    local min_age="${WORKTREE_REAP_MIN_AGE_SECONDS:-86400}" now
+    now="$(date +%s)"
 
     local dryrun=0
     [ "${WORKTREE_REAP_DRYRUN:-0}" = "1" ] && dryrun=1
@@ -85,6 +107,16 @@ main() {
         wt_base="$(basename "$wt_path")"
         lock_marker="$common_dir/worktrees/$wt_base/locked"
         if [ -f "$lock_marker" ]; then
+            return 0
+        fi
+
+        # In-use check: live process cwd inside the worktree, or recent activity.
+        if printf '%s\n' "$live_cwds" | awk -v p="$wt_path" 'index($0,p"/")==1 || $0==p{f=1} END{exit !f}'; then
+            return 0
+        fi
+        local act
+        act="$(newest_activity "$common_dir/worktrees/$wt_base")"
+        if [ $((now - act)) -lt "$min_age" ]; then
             return 0
         fi
 
