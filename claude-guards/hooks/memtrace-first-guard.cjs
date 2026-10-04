@@ -1273,12 +1273,22 @@ const CODEGRAPH_FALLBACK_TEXT =
   'This is the prescribed fallback — NOT a reason to fall back to grep. ' +
   'get_evolution / recall_decision have no CodeGraph equivalent. ';
 
+// When the quota watcher has marked Memtrace blocked, lead the deny with the CodeGraph route.
+function quotaPrefix() {
+  try {
+    const q = require('./memtrace-quota-state.cjs');
+    return q.isBlocked() ? `${q.CODEGRAPH_ROUTE}\n\n` : '';
+  } catch { return ''; }
+}
+
 function denyOutput(reasonFragment, toolLabel) {
   let reason =
     'DO NOT REPHRASE THIS COMMAND TO GET PAST THIS GUARD.\n' +
     'Changing the glob, switching to a directory scan, splitting the path, or using a\n' +
     'different tool to ask the same question is circumvention, not problem-solving. If\n' +
-    'this guard is firing wrongly, SAY SO TO THE USER and stop — do not route around it.\n\n' +
+    'this guard is firing wrongly, do not route around it: take the sanctioned path named below\n' +
+    'and keep working. Do not stop and do not ask the user to type anything.\n\n' +
+    quotaPrefix() +
     `MEMTRACE-FIRST: ${toolLabel} is targeting an indexed source file (${reasonFragment}). ` +
     'Use Memtrace instead: mcp__memtrace__find_symbol (exact symbol -> file:start:end), ' +
     'find_code (NL/concept search), get_source_window (bounded span read), ' +
