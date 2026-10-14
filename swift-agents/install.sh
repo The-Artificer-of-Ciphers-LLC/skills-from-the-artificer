@@ -12,7 +12,7 @@
 #   bash install.sh --both-global      Both tools globally
 #
 # One-liner:
-#   curl -fsSL https://raw.githubusercontent.com/Techopolis/swift-agents/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/swift-agents/main/install.sh | bash
 
 set -e
 
@@ -39,7 +39,7 @@ if [ -z "$SCRIPT_DIR" ] || [ ! -d "$SCRIPT_DIR/agents" ] || [ ! -f "$SCRIPT_DIR/
     exit 1
   fi
 
-  git clone --quiet https://github.com/Techopolis/swift-agents.git "$TMPDIR_DL/swift-agents" 2>/dev/null
+  git clone --quiet https://github.com/The-Artificer-of-Ciphers-LLC/swift-agents.git "$TMPDIR_DL/swift-agents" 2>/dev/null
   SCRIPT_DIR="$TMPDIR_DL/swift-agents"
   echo "  Downloaded."
 fi
@@ -318,7 +318,7 @@ SRC="$HOME/.swift-agents/vscode"
 if [ ! -d "$SRC/agents" ]; then
   echo ""
   echo "  Error: Swift Agents VS Code agents not installed globally."
-  echo "  Run: curl -fsSL https://raw.githubusercontent.com/Techopolis/swift-agents/main/install.sh | bash -s -- --vscode-global"
+  echo "  Run: curl -fsSL https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/swift-agents/main/install.sh | bash -s -- --vscode-global"
   echo ""
   exit 1
 fi
@@ -392,7 +392,7 @@ if [ "$SCOPE" = "global" ] && [ "$INSTALL_CLAUDE" = true ] && { [ -t 0 ] || [ -c
     cat > "$UPDATE_SCRIPT" << 'UPDATESCRIPT'
 #!/bin/bash
 set -e
-REPO_URL="https://github.com/Techopolis/swift-agents.git"
+REPO_URL="https://github.com/The-Artificer-of-Ciphers-LLC/swift-agents.git"
 CACHE_DIR="$HOME/.claude/.swift-agents-repo"
 INSTALL_DIR="$HOME/.claude"
 LOG_FILE="$HOME/.claude/.swift-agents-update.log"
@@ -557,7 +557,7 @@ install_companion_skills() {
   echo ""
 
   # Fetch the recommended skills list from awesome-ios-ai on GitHub
-  SKILLS_URL="https://raw.githubusercontent.com/Techopolis/swift-agents/main/companion-skills.txt"
+  SKILLS_URL="https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/swift-agents/main/companion-skills.txt"
   SKILLS_LIST=""
 
   if command -v curl &>/dev/null; then

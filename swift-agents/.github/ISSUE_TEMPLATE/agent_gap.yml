@@ -1,0 +1,60 @@
+name: Agent Gap
+description: An agent missed something or gave incorrect guidance
+labels: ["agent-gap"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If an agent missed a Swift pattern, gave wrong advice, enforced an outdated practice, or failed to catch something it should have caught, let us know here. These reports directly improve agent instructions.
+
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Which agent?
+      options:
+        - swift-lead
+        - concurrency-specialist
+        - foundation-models-specialist
+        - on-device-ai-architect
+        - mobile-a11y-specialist
+        - swiftui-specialist
+        - app-review-guardian
+        - testing-specialist
+        - swift-security-specialist
+    validations:
+      required: true
+
+  - type: dropdown
+    id: gap-type
+    attributes:
+      label: What kind of gap?
+      options:
+        - Missed an issue it should have caught
+        - Gave incorrect advice
+        - Enforced an outdated pattern
+        - Did not invoke the right specialist (swift-lead)
+        - False positive (flagged something that is actually fine)
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe what the agent did or did not do, and what the correct behavior should have been.
+    validations:
+      required: true
+
+  - type: textarea
+    id: code
+    attributes:
+      label: Code or prompt
+      description: Share the code the agent reviewed or the prompt you used, if possible.
+      render: swift
+
+  - type: input
+    id: swift-version
+    attributes:
+      label: Swift version
+      description: Which version of Swift are you targeting?
+      placeholder: e.g. 6.2, 6.0, 5.9

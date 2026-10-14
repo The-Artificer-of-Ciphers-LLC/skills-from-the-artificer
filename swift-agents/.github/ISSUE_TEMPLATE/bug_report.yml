@@ -1,0 +1,62 @@
+name: Bug Report
+description: Something is not working correctly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill out as much detail as you can so we can reproduce and fix it.
+
+  - type: dropdown
+    id: install-type
+    attributes:
+      label: Install type
+      description: How did you install?
+      options:
+        - Project-level (copied .claude into project)
+        - Global (~/.claude/)
+        - Manual
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows
+
+  - type: input
+    id: agent
+    attributes:
+      label: Which agent?
+      description: If the issue is with a specific agent, which one?
+      placeholder: e.g. concurrency-specialist, swift-lead, mobile-a11y-specialist
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug. What did you expect to happen vs what actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce the issue?
+      placeholder: |
+        1. Opened Claude Code in a Swift project
+        2. Typed 'Build a settings screen with a toggle'
+        3. Hook fired but swift-lead did not invoke mobile-a11y-specialist
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that might help — error messages, Claude Code version, relevant code snippets.
