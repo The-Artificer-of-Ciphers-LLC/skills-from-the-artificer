@@ -1,5 +1,17 @@
 #!/usr/bin/env node
-// gsd-hook-version: 1.6.2
+// gsd-hook-version: 1.8.0
+//
+// 1.8.0 (2026-10-13): CodeGraph-first routing (docs/research/codegraph-vs-memtrace-routing.md
+//   sections 4, 7, 9). (a) The deny text LEADS with CodeGraph for lookups/reads (free, local) and
+//   names Memtrace only for heavy hits (history, decisions, cross-repo, risky blast radius, PR
+//   review evidence, dead code/complexity). (b) A CodeGraph read of the file also counts as the
+//   read proof for a later Read: a `codegraph explore|node|query` Bash call or a
+//   codegraph_explore MCP call that names the file (see codegraphReadProof); the Memtrace
+//   get_source_window path and the codegraph_node file-mode path stay span-exact and unchanged.
+//   (c) No-index gap: no `.codegraph/` at the git toplevel / common dir AND Memtrace blocked
+//   (isBlocked) -> ALLOW with a visible one-line message instead of denying. (d) When Memtrace is
+//   blocked the text uses the quota module's codegraphRoute() (includes the return time).
+//   (e) The dangling docs cite is fixed.
 //
 // 1.7.1 (2026-10-03): the Read carve-out also accepts a span returned by CodeGraph's
 //   codegraph_node in FILE mode (see CODEGRAPH_NODE_TOOL), so the CodeGraph fallback can
@@ -591,7 +603,7 @@ function checkRead(input, cwd, toplevel) {
 // 1.7.1: CodeGraph's `codegraph_node` in FILE mode is the Read-equivalent that counts as the
 // read for a later Read/Edit when Memtrace is unavailable. Facts, from the installed
 // CodeGraph v1.6.0 dist/mcp/tools.js (`codegraph_node` inputSchema) and upstream
-// colbymchenry/codegraph @6560052 README.md:539 + docs/research/codegraph-fallback-equivalents.md:
+// colbymchenry/codegraph @6560052 README.md:539 + docs/research/codegraph-vs-memtrace-routing.md:
 //   - input `file` (path/basename) with NO `symbol` = file mode; `offset` (1-based) and `limit` are
 //     "exactly like Read's"; omitted limit = whole file, capped at 2000 lines;
 //   - the result starts `**<repo-relative path>** — N lines ...` and, for a partial read, ends
@@ -639,6 +651,86 @@ function codegraphNodeCovers(input, text, target, offset, end) {
   } catch {
     return false;
   }
+}
+
+// 1.8.0: a CodeGraph read of the file counts as the read proof for a later Read. Accepts, from a
+// session/subagent transcript, (1) a Bash `codegraph explore|node|query ...` call, or (2) an
+// mcp__codegraph__codegraph_explore call, whose command/query NAMES the file (repo-relative path,
+// absolute path, or basename) and whose result is a non-error, non-empty answer. When the Bash form
+// carries an explicit --offset/--limit, that span must cover the Read's span (span-exact).
+// The Memtrace get_source_window path above is unchanged and stays span-exact.
+const CODEGRAPH_EXPLORE_TOOL = 'mcp__codegraph__codegraph_explore';
+const CODEGRAPH_BASH_RE = /(^|[\s;&|(])codegraph\s+(?:--?\S+\s+)*(explore|node|query)\b/;
+
+function namesFile(text, target, toplevel) {
+  if (typeof text !== 'string' || !text) return false;
+  const base = path.basename(target);
+  const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const cands = [target];
+  if (toplevel) { const rel = path.relative(toplevel, target); if (rel && !rel.startsWith('..')) cands.push(rel); }
+  for (const c of cands) if (text.includes(c)) return true;
+  return new RegExp('(^|[^A-Za-z0-9_.-])' + esc(base) + '($|[^A-Za-z0-9_-])').test(text);
+}
+
+function codegraphReadProof(transcriptPath, absPath, offset, limit) {
+  try {
+    if (!transcriptPath || !absPath) return false;
+    const MAX = 8 * 1024 * 1024;
+    const size = fs.statSync(transcriptPath).size;
+    let text;
+    if (size > MAX) {
+      const fd = fs.openSync(transcriptPath, 'r');
+      try {
+        const buf = Buffer.alloc(MAX);
+        fs.readSync(fd, buf, 0, MAX, size - MAX);
+        text = buf.toString('utf8');
+      } finally { fs.closeSync(fd); }
+      const nl = text.indexOf('\n');
+      text = nl >= 0 ? text.slice(nl + 1) : '';
+    } else {
+      text = fs.readFileSync(transcriptPath, 'utf8');
+    }
+    const real = (p) => { try { return fs.realpathSync(p); } catch { return path.normalize(p); } };
+    const target = real(absPath);
+    const toplevel = toplevelContaining(target);
+    const lines = text.split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } });
+    const ids = new Map();
+    for (const d of lines) {
+      const c = d && d.message && d.message.content;
+      if (!Array.isArray(c)) continue;
+      for (const b of c) {
+        if (!b || b.type !== 'tool_use' || !b.id || !b.input) continue;
+        if (b.name === 'Bash' && typeof b.input.command === 'string' && CODEGRAPH_BASH_RE.test(b.input.command)
+            && namesFile(b.input.command, target, toplevel)) ids.set(b.id, { kind: 'bash', cmd: b.input.command });
+        else if (b.name === CODEGRAPH_EXPLORE_TOOL && namesFile(String(b.input.query || b.input.question || ''), target, toplevel)) ids.set(b.id, { kind: 'mcp' });
+      }
+    }
+    if (!ids.size) return false;
+    for (const d of lines) {
+      const c = d && d.message && d.message.content;
+      if (!Array.isArray(c)) continue;
+      for (const b of c) {
+        if (!b || b.type !== 'tool_result' || !ids.has(b.tool_use_id) || b.is_error) continue;
+        const use = ids.get(b.tool_use_id);
+        const body = typeof b.content === 'string' ? b.content
+          : (Array.isArray(b.content) ? b.content.map((t) => (t && typeof t.text === 'string' ? t.text : '')).join('\n') : '');
+        if (body.trim().length < 20 || /^\s*(error|no (indexed )?file)/i.test(body)) continue;
+        if (use.kind === 'bash') {
+          const o = use.cmd.match(/--offset[= ](\d+)/);
+          const l = use.cmd.match(/--limit[= ](\d+)/);
+          if (o || l) {
+            // explicit span: it must cover the Read's span
+            if (!(Number.isInteger(offset) && Number.isInteger(limit))) continue;
+            const start = o ? Number(o[1]) : 1;
+            const last = l ? start + Number(l[1]) - 1 : Infinity;
+            if (!(start <= offset && offset + limit - 1 <= last)) continue;
+          }
+        }
+        return true;
+      }
+    }
+  } catch { /* fall through */ }
+  return false;
 }
 
 // 1.6.0: span-exact Read carve-out. A Read of indexed source is allowed only
@@ -1256,53 +1348,97 @@ function allowOutput() {
 // There is NO CodeGraph equivalent of get_evolution / recall_decision (history and
 // decision memory); those have no fallback, so do not substitute grep/git log.
 const CODEGRAPH_FALLBACK_TEXT =
-  'NO mcp__memtrace__* TOOLS, or Memtrace unavailable / quota-exhausted? Use CodeGraph, which ' +
-  'indexes the same repository, returns verbatim line-numbered source and has no monthly quota. ' +
-  'Pick the equivalent of the Memtrace tool you would have used (do NOT use codegraph_explore for ' +
-  'every action):\n' +
-  '  find_symbol (exact name)        -> CLI `codegraph query <symbol>` [README.md:537, :590]\n' +
-  '  find_code (NL/concept)          -> mcp__codegraph__codegraph_explore "<question>" or CLI `codegraph explore <query>` [README.md:482, :538, :588]\n' +
-  '  get_source_window (bounded read)-> CLI `codegraph node -f <file> --offset <1-based start> --limit <max lines>` (bounded span with line numbers) or codegraph_explore naming the file/symbol [README.md:539, :482; `codegraph node --help` v1.6.0; docs/research/codegraph-fallback-equivalents.md]\n' +
-  '  get_symbol_context (one symbol) -> CLI `codegraph node <symbol>`, `codegraph callers <symbol>`, `codegraph callees <symbol>` [README.md:539, :541, :542]\n' +
-  '  get_impact (blast radius)       -> CLI `codegraph impact <symbol>` (--depth N); tests: `codegraph affected <files...>` [README.md:543, :544]\n' +
+  'CodeGraph indexes the same repository, returns verbatim line-numbered source and has no monthly quota; ' +
+  'it is also the route when there are NO mcp__memtrace__* TOOLS or Memtrace is unavailable / quota-exhausted. ' +
+  'Pick the command that fits the lookup (do NOT use codegraph_explore for every action):\n' +
+  '  find a symbol (exact name)      -> CLI `codegraph query <symbol>` [README.md:537, :590]\n' +
+  '  where/how does X work (NL)      -> mcp__codegraph__codegraph_explore "<question>" or CLI `codegraph explore <query>` [README.md:482, :538, :588]\n' +
+  '  read a file / line span         -> CLI `codegraph node -f <file> --offset <1-based start> --limit <max lines>` (bounded span with line numbers) or codegraph_explore naming the file/symbol [README.md:539, :482; `codegraph node --help` v1.6.0; docs/research/codegraph-vs-memtrace-routing.md]\n' +
+  '  one symbol, callers, callees    -> CLI `codegraph node <symbol>`, `codegraph callers <symbol>`, `codegraph callees <symbol>` [README.md:539, :541, :542]\n' +
+  '  blast radius, ordinary edit     -> CLI `codegraph impact <symbol>` (--depth N); tests: `codegraph affected <files...>` [README.md:543, :544]\n' +
   '  task context bundle             -> CLI `codegraph context "<task>"` [codegraph --help v1.6.0]\n' +
   'The MCP surface lists ONLY codegraph_explore by default; the narrower tools (codegraph_node/search/' +
   'callers/callees/impact/files) exist only if CODEGRAPH_MCP_TOOLS enables them, so the CLI is the ' +
   'always-available route [README.md:584-590]. Pass `projectPath` (MCP) or `--path` (CLI) to target a ' +
   'worktree or second repo [README.md:592]. Subagents use the CLI forms [README.md:486]. ' +
   'This is the prescribed fallback — NOT a reason to fall back to grep. ' +
-  'get_evolution / recall_decision have no CodeGraph equivalent. ';
+  'get_evolution / recall_decision have no CodeGraph equivalent (those are the Memtrace-only heavy hits). ';
 
-// When the quota watcher has marked Memtrace blocked, lead the deny with the CodeGraph route.
-function quotaPrefix() {
+// Quota helpers. memtrace-quota-state.cjs is required defensively: a missing function falls back
+// to isBlocked() / the older CODEGRAPH_ROUTE text, and any failure means "not blocked".
+function quotaMod() {
+  try { return require('./memtrace-quota-state.cjs'); } catch { return null; }
+}
+function memtraceBlocked() {
+  try { const q = quotaMod(); return !!(q && typeof q.isBlocked === 'function' && q.isBlocked()); } catch { return false; }
+}
+// Route text for a blocked Memtrace, ending with the return time when the module knows it.
+function blockedRoute() {
   try {
-    const q = require('./memtrace-quota-state.cjs');
-    return q.isBlocked() ? `${q.CODEGRAPH_ROUTE}\n\n` : '';
+    const q = quotaMod();
+    if (!q || !memtraceBlocked()) return '';
+    if (typeof q.codegraphRoute === 'function') { const r = q.codegraphRoute(); if (r) return String(r); }
+    let r = String(q.CODEGRAPH_ROUTE || '');
+    if (typeof q.cooldownInfo === 'function') {
+      const c = q.cooldownInfo();
+      if (c && c.untilIso) r += ' Memtrace is expected back at ' + c.untilIso + '.';
+    }
+    return r;
   } catch { return ''; }
 }
 
+// 1.8.0 (c): true when the repo for `cwd` has no CodeGraph index at the git toplevel or at the
+// main checkout (git common dir parent, for linked worktrees).
+function hasCodegraphIndex(cwd, toplevel) {
+  const dirs = [];
+  if (toplevel) dirs.push(toplevel);
+  try {
+    const common = gitCommonDirOf(cwd);
+    if (common) dirs.push(path.dirname(common));
+  } catch { /* ignore */ }
+  if (!dirs.length) return true; // unknown repo -> do not claim "no index"
+  return dirs.some((d) => { try { return fs.statSync(path.join(d, '.codegraph')).isDirectory(); } catch { return false; } });
+}
+
+function allowWithNote(msg) {
+  process.stdout.write(JSON.stringify({
+    systemMessage: msg,
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'allow',
+      permissionDecisionReason: msg,
+      additionalContext: msg,
+    },
+  }));
+}
+
 function denyOutput(reasonFragment, toolLabel) {
+  const route = blockedRoute();
   let reason =
     'DO NOT REPHRASE THIS COMMAND TO GET PAST THIS GUARD.\n' +
     'Changing the glob, switching to a directory scan, splitting the path, or using a\n' +
     'different tool to ask the same question is circumvention, not problem-solving. If\n' +
     'this guard is firing wrongly, do not route around it: take the sanctioned path named below\n' +
     'and keep working. Do not stop and do not ask the user to type anything.\n\n' +
-    quotaPrefix() +
-    `MEMTRACE-FIRST: ${toolLabel} is targeting an indexed source file (${reasonFragment}). ` +
-    'Use Memtrace instead: mcp__memtrace__find_symbol (exact symbol -> file:start:end), ' +
-    'find_code (NL/concept search), get_source_window (bounded span read), ' +
-    'get_symbol_context / get_impact (callers, blast radius). ' +
+    (route ? route + '\n\n' : '') +
+    `MEMTRACE-FIRST guard (CodeGraph-first routing): ${toolLabel} is targeting an indexed source file (${reasonFragment}). ` +
+    'Lookups and reads are low-risk: use CodeGraph (free, local, no quota) for them. ' +
     CODEGRAPH_FALLBACK_TEXT +
+    'RESERVE Memtrace (it costs quota per call) for the heavy hits only: git history / evolution / timeline ' +
+    '(get_evolution, get_timeline, get_cochange_context), decisions and conventions (recall_decision), ' +
+    'cross-repo / API topology (get_api_topology, find_api_calls), blast radius of a RISKY change such as a ' +
+    'public API or shared util (get_impact, find_bridge_symbols), PR review evidence, and dead code / complexity ' +
+    '(find_dead_code, complexity). ' +
     'CAVEAT: in a git worktree, brand-new symbols live in an overlay. ONLY find_code takes a ' +
     '`worktree` param — find_symbol / get_symbol_context / get_impact do NOT, so a miss from ' +
-    'those is not proof of absence; re-ask find_code({repo_id, query, worktree}). ' +
+    'those is not proof of absence; re-ask find_code({repo_id, query, worktree}) or use CodeGraph, whose watcher indexes the tree. ' +
     'NOT blocked: prose/config .md/.json/.yml/.toml, file-inventory counts, anything under ' +
-    'bin/ or other non-indexed dirs, and re-reading a span Memtrace already returned. ' +
-    'Read on indexed source is allowed only for an offset/limit span that a prior ' +
-    'mcp__memtrace__get_source_window call returned for this exact file (resolved_path + line range), ' +
-    'or that a prior mcp__codegraph__codegraph_node FILE-mode call returned (`file` + `offset`/`limit`, no `symbol`; ' +
-    'in a linked worktree you MUST pass `projectPath` = the worktree root). ' +
+    'bin/ or other non-indexed dirs, and re-reading a span already returned. ' +
+    'Read on indexed source is allowed only after a read of that file: a `codegraph explore|node|query` Bash call or ' +
+    'mcp__codegraph__codegraph_explore call that names the file (a `--offset/--limit` span must cover your Read), ' +
+    'a prior mcp__codegraph__codegraph_node FILE-mode call (`file` + `offset`/`limit`, no `symbol`; ' +
+    'in a linked worktree you MUST pass `projectPath` = the worktree root), or an offset/limit span that a prior ' +
+    'mcp__memtrace__get_source_window call returned for this exact file (resolved_path + line range). ' +
     'In a git worktree, pass get_source_window the ABSOLUTE path of the file in YOUR checkout as ' +
     '`file_path`: a relative path resolves against the indexed repo root (often the main checkout), ' +
     'so the returned resolved_path names a different file than the one you then Read and this ' +
@@ -1350,7 +1486,8 @@ async function main() {
       const fp = typeof input.file_path === 'string' ? input.file_path : '';
       const abs = resolveAbsolute(cwd, fp);
       const transcriptPath = typeof payload.transcript_path === 'string' ? payload.transcript_path : '';
-      if (abs && memtraceSpanCovers(transcriptPath, abs, input.offset, input.limit)) reason = null;
+      const covered = (tp) => memtraceSpanCovers(tp, abs, input.offset, input.limit) || codegraphReadProof(tp, abs, input.offset, input.limit);
+      if (abs && covered(transcriptPath)) reason = null;
       // 1.6.1: a SUBAGENT's hook payload carries the PARENT session's
       // transcript_path; the subagent's own get_source_window calls live in
       // <session>/subagents/agent-<agent_id>.jsonl. Only when the parent check
@@ -1359,7 +1496,7 @@ async function main() {
       if (reason && abs && transcriptPath && typeof payload.agent_id === 'string' && /^[A-Za-z0-9_-]+$/.test(payload.agent_id)) {
         const sessionDir = path.join(path.dirname(transcriptPath), path.basename(transcriptPath, '.jsonl'));
         const agentTranscript = path.join(sessionDir, 'subagents', 'agent-' + payload.agent_id + '.jsonl');
-        if (memtraceSpanCovers(agentTranscript, abs, input.offset, input.limit)) reason = null;
+        if (covered(agentTranscript)) reason = null;
       }
     }
   } else {
@@ -1372,6 +1509,10 @@ async function main() {
     cwd,
     session: typeof payload.session_id === 'string' ? payload.session_id : '',
   };
+  if (reason && memtraceBlocked() && !hasCodegraphIndex(cwd, toplevel)) {
+    // 1.8.0 (c): nothing to route to. Allow, visibly, instead of a dead-end deny.
+    return allowWithNote('MEMTRACE-FIRST guard: no CodeGraph index and Memtrace unavailable; reading directly; run `codegraph init` if you want an index.');
+  }
   if (reason) {
     try { recordDeny(ctx, reason); } catch { /* never affect the decision */ }
     return denyOutput(reason, tool);

@@ -42,6 +42,10 @@ printf '// fixture\n' > "$FIXHOME/.claude/hooks/tier-guard.cjs"
 FIX_SETUP_OK=1
 [ -d "$WT_A/scripts" ] && [ -d "$WT_B/scripts" ] && [ -n "$(git -C "$REAL_REPO" rev-parse --verify -q HEAD)" ] || FIX_SETUP_OK=0
 
+# Hermeticity: never read the real ~/.claude/state/memtrace-quota.json (absent file = not blocked).
+QS_DIR=$(mktemp -d)
+export MEMTRACE_QUOTA_STATE="$QS_DIR/quota.json"
+
 N=0
 F=0
 pass() { N=$((N+1)); echo "PASS  $1"; }
@@ -734,6 +738,98 @@ for needle in 'codegraph query' 'codegraph node' 'codegraph callers' 'codegraph 
   if printf '%s' "$CG_OUT" | grep -qF "$needle"; then pass "1.7.0 deny text names: $needle"; else fail "1.7.0 deny text names: $needle" "missing"; fi
 done
 if printf '%s' "$CG_OUT" | grep -qF 'there is no supported CLI'; then fail "1.7.0 stale 'no CLI' claim removed" "still present"; else pass "1.7.0 stale 'no CLI' claim removed"; fi
+
+echo "=== 1.8.0: CodeGraph-first routing, quota-blocked state, no-index allow ==="
+qs_block() { # qs_block <minutes-from-now>
+  node -e 'const m=+process.argv[1];require("fs").writeFileSync(process.env.MEMTRACE_QUOTA_STATE,JSON.stringify({blocked:true,ts:Date.now(),until:Date.now()+m*60000,untilIso:new Date(Date.now()+m*60000).toISOString()}))' -- "$1"
+}
+qs_clear() { rm -f "$MEMTRACE_QUOTA_STATE"; }
+RD_JSON() { python3 -c 'import json,sys;print(json.dumps({"tool_name":"Read","tool_input":{"file_path":sys.argv[1]},"cwd":sys.argv[2],"transcript_path":sys.argv[3]}))' "$1" "$2" "${3:-}"; }
+SRC="$REAL_REPO/src/foo.cts"
+OUTTXT() { printf '%s' "$OUT" | python3 -c 'import json,sys;d=json.load(sys.stdin);h=d["hookSpecificOutput"];print(h.get("permissionDecisionReason","")+" "+d.get("systemMessage",""))'; }
+
+# deny text leads with CodeGraph for lookups, Memtrace only for heavy hits
+qs_clear
+run "$(RD_JSON "$SRC" "$REAL_REPO")"
+check "1.8.0 not blocked, no index: still deny (Memtrace not known unavailable)" "$DENY_CHECK"
+T=$(OUTTXT)
+POS_CG=$(printf '%s' "$T" | grep -bo 'CodeGraph (free' | head -1 | cut -d: -f1)
+POS_MT=$(printf '%s' "$T" | grep -bo 'RESERVE Memtrace' | head -1 | cut -d: -f1)
+if [ -n "$POS_CG" ] && [ -n "$POS_MT" ] && [ "$POS_CG" -lt "$POS_MT" ]; then pass "1.8.0 deny text names CodeGraph before Memtrace"; else fail "1.8.0 deny text order" "cg=$POS_CG mt=$POS_MT"; fi
+for needle in get_evolution recall_decision get_api_topology find_bridge_symbols 'dead code'; do
+  if printf '%s' "$T" | grep -qF "$needle"; then pass "1.8.0 heavy-hit category named: $needle"; else fail "1.8.0 heavy-hit category named: $needle" missing; fi
+done
+if printf '%s' "$T" | grep -qF 'codegraph-fallback-equivalents'; then fail "1.8.0 dangling doc cite removed" "still present"; else pass "1.8.0 dangling doc cite removed"; fi
+
+# no index + Memtrace blocked -> allow with visible message
+qs_block 90
+run "$(RD_JSON "$SRC" "$REAL_REPO")"
+check "1.8.0 no .codegraph + Memtrace blocked -> allow" "$ALLOW_CHECK"
+if OUTTXT | grep -qF 'no CodeGraph index and Memtrace unavailable; reading directly; run `codegraph init`'; then pass "1.8.0 no-index allow carries the visible message"; else fail "1.8.0 no-index message" "$(OUTTXT)"; fi
+run "$(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Bash","tool_input":{"command":"cat src/foo.cts"},"cwd":sys.argv[1]}))' "$REAL_REPO")"
+check "1.8.0 no .codegraph + blocked: Bash cat -> allow" "$ALLOW_CHECK"
+run "$(RD_JSON "$WT_FILE" "$WT_A")"
+check "1.8.0 no .codegraph anywhere (worktree) + blocked -> allow" "$ALLOW_CHECK"
+
+# blocked + indexed -> still routes to CodeGraph (deny) and the text carries the return time
+mkdir -p "$REAL_REPO/.codegraph"
+run "$(RD_JSON "$SRC" "$REAL_REPO")"
+check "1.8.0 indexed + Memtrace blocked -> deny (route to CodeGraph)" "$DENY_CHECK"
+T=$(OUTTXT)
+if printf '%s' "$T" | grep -qE '20[0-9]{2}-[0-9]{2}-[0-9]{2}T?[0-9: ]*|[0-9]+ ?(min|minutes) '; then pass "1.8.0 blocked deny text carries a return time"; else fail "1.8.0 return time in text" "none found (needs memtrace-quota-state codegraphRoute())"; fi
+if printf '%s' "$T" | grep -qF 'codegraph query'; then pass "1.8.0 blocked deny text routes to CodeGraph CLI"; else fail "1.8.0 blocked route" missing; fi
+run "$(RD_JSON "$WT_FILE" "$WT_A")"
+check "1.8.0 worktree: index only at the main checkout (common dir) + blocked -> deny" "$DENY_CHECK"
+qs_clear
+run "$(RD_JSON "$SRC" "$REAL_REPO")"
+check "1.8.0 indexed, not blocked -> deny" "$DENY_CHECK"
+qs_block -5
+rm -rf "$REAL_REPO/.codegraph"
+run "$(RD_JSON "$SRC" "$REAL_REPO")"
+check "1.8.0 expired block + no index -> deny (Memtrace available again)" "$DENY_CHECK"
+qs_clear
+
+# CodeGraph read proof: Bash codegraph explore|node|query and codegraph_explore MCP naming the file
+CGP_T=$(mktemp)
+cgp() { # cgp <tool_name> <input json> <result text>
+  python3 - "$CGP_T" "$1" "$2" "$3" <<'PY'
+import json,sys
+out,name,inp,txt=sys.argv[1],sys.argv[2],json.loads(sys.argv[3]),sys.argv[4]
+a={"type":"assistant","message":{"content":[{"type":"tool_use","id":"g1","name":name,"input":inp}]}}
+u={"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"g1","content":[{"type":"text","text":txt}]}]}}
+open(out,"w").write(json.dumps(a)+"\n"+json.dumps(u)+"\n")
+PY
+}
+CGP_BODY=$'**src/foo.cts** \xe2\x80\x94 2 lines\n\n1\t// fixture src/foo.cts\n2\tline'
+RDS() { run "$(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Read","tool_input":dict({"file_path":sys.argv[1]},**json.loads(sys.argv[3])),"cwd":sys.argv[2],"transcript_path":sys.argv[4]}))' "$SRC" "$REAL_REPO" "$1" "$CGP_T")"; }
+cgp Bash '{"command":"codegraph explore src/foo.cts"}' "$CGP_BODY"
+RDS '{"offset":1,"limit":2}'
+check "1.8.0 proof: Bash codegraph explore naming the file -> allow" "$ALLOW_CHECK"
+cgp Bash '{"command":"codegraph node -f src/foo.cts --offset 1 --limit 2"}' "$CGP_BODY"
+RDS '{"offset":1,"limit":2}'
+check "1.8.0 proof: Bash codegraph node -f --offset/--limit covering -> allow" "$ALLOW_CHECK"
+RDS '{"offset":1,"limit":3}'
+check "1.8.0 proof: explicit CLI span does not cover the Read -> deny" "$DENY_CHECK"
+cgp Bash '{"command":"codegraph query foo"}' "$CGP_BODY"
+RDS '{"offset":1,"limit":2}'
+check "1.8.0 proof: codegraph query that does not name the file -> deny" "$DENY_CHECK"
+cgp Bash '{"command":"codegraph explore src/other.cts"}' "$CGP_BODY"
+RDS '{"offset":1,"limit":2}'
+check "1.8.0 proof: codegraph explore naming a different file -> deny" "$DENY_CHECK"
+cgp mcp__codegraph__codegraph_explore '{"query":"show src/foo.cts"}' "$CGP_BODY"
+RDS '{"offset":1,"limit":2}'
+check "1.8.0 proof: codegraph_explore MCP naming the file -> allow" "$ALLOW_CHECK"
+cgp mcp__codegraph__codegraph_explore '{"query":"how does auth work"}' "$CGP_BODY"
+RDS '{"offset":1,"limit":2}'
+check "1.8.0 proof: codegraph_explore MCP not naming the file -> deny" "$DENY_CHECK"
+cgp Bash '{"command":"echo codegraph explore src/foo.cts > /dev/null; true"}' "x"
+RDS '{"offset":1,"limit":2}'
+check "1.8.0 proof: empty/short result is not a proof -> deny" "$DENY_CHECK"
+cgp Bash '{"command":"grep foo src/foo.cts"}' "$CGP_BODY"
+RDS '{"offset":1,"limit":2}'
+check "1.8.0 proof: a non-codegraph Bash call is not a proof -> deny" "$DENY_CHECK"
+rm -f "$CGP_T"
+rm -rf "$QS_DIR"
 
 echo
 echo "memtrace-first-guard suite: $((N-F))/$N passed"

@@ -90,6 +90,34 @@ cd ~/.claude/hooks
 ./measure-dont-infer-guard.test.sh  #  66 cases
 ```
 
+## Memtrace quota fallback
+
+Memtrace reports an exhausted quota as a normal (non-error) result. Three pieces turn that
+into a cooldown that routes agents to CodeGraph and says when Memtrace returns:
+
+    memtrace-quota-watch.cjs     PostToolUse + PostToolUseFailure  mcp__memtrace__.*
+    memtrace-quota-gate.cjs      PreToolUse                        mcp__memtrace__.*
+    memtrace-quota-state.cjs     shared state (not a hook)
+
+The watch records the cooldown and injects the CodeGraph route plus the return time. A
+normal Memtrace answer clears it. The gate denies billed Memtrace calls while the cooldown
+is live, except the unbilled `list_indexed_repositories`, `get_repository_stats`,
+`get_directory_tree`, any `fleet_*`, and one serialized probe once `probeAfter` passes
+(`probeDue()` then `claimProbe()`; failed probes back off 15 min, 30 min, ... up to 4 h).
+Escape hatch: `GSD_MEMTRACE_QUOTA_GATE=off`. All three fail open.
+
+State file `~/.claude/state/memtrace-quota.json` (override `MEMTRACE_QUOTA_STATE`):
+`{v, blocked, reason, ts, until, untilSource, probeAfter, probes, plan?, upgradeUrl?, monthlyUsed?, monthlyLimit?}`
+
+| reason | until | untilSource |
+|---|---|---|
+| monthly | `quota.periodEnd`, capped at 24 h | periodEnd (else now+1 h, fallback) |
+| daily (`throttleMode` or "Daily ..." message) | next UTC midnight | nextUtcMidnight |
+| auth ("Authentication expired") / unreachable | now+5 min | fallback |
+
+Tests: `memtrace-quota-state.test.sh`, `memtrace-quota-gate.test.sh`,
+`guard-denial-breaker.test.sh`.
+
 ## agent-dispatch-guard.cjs
 
 Runs on every `Agent` call (PreToolUse). It does three independent jobs.

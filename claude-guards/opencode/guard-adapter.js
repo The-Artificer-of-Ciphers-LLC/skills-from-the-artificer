@@ -39,19 +39,34 @@ function verdict(r) {
   return null
 }
 
-export const ClaudeGuardAdapter = async ({ directory }) => ({
-  "tool.execute.before": async (input, output) => {
-    const tool = NAME[input.tool]
-    for (const g of GUARDS[tool] || []) {
-      const file = join(HOOKS, g)
-      const cmd = g.endsWith(".sh") ? ["bash", [file]] : ["node", [file]]
-      const r = spawnSync(cmd[0], cmd[1], {
-        input: JSON.stringify({ hook_event_name: "PreToolUse", session_id: input.sessionID, cwd: directory,
-          tool_name: tool, tool_input: toClaudeInput(output.args) }),
-        timeout: 10000,
-      })
-      const why = verdict(r)
-      if (why) throw new Error(`[${g}] ${why}`)
-    }
+function runGuards(toolName, sessionID, directory, args) {
+  const tool = NAME[String(toolName).toLowerCase()]
+  for (const g of GUARDS[tool] || []) {
+    const file = join(HOOKS, g)
+    const cmd = g.endsWith(".sh") ? ["bash", [file]] : ["node", [file]]
+    const r = spawnSync(cmd[0], cmd[1], {
+      input: JSON.stringify({ hook_event_name: "PreToolUse", session_id: sessionID, cwd: directory,
+        tool_name: tool, tool_input: toClaudeInput(args) }),
+      timeout: 10000,
+    })
+    const why = verdict(r)
+    if (why) throw new Error(`[${g}] ${why}`)
+  }
+}
+
+// opencode v2 (Promise plugin API): a default definition with an id and a setup function.
+// A throw in an "execute.before" hook rejects that one tool call.
+export default {
+  id: "claude-guard-adapter",
+  setup: async (ctx) => {
+    const directory = ctx?.location?.directory ?? process.cwd()
+    await ctx.tool.hook("execute.before", (event) => {
+      runGuards(event.tool, event.sessionID, directory, event.input)
+    })
   },
+}
+
+// opencode v1 plugin shape, kept so the same file still loads there.
+export const ClaudeGuardAdapter = async ({ directory }) => ({
+  "tool.execute.before": async (input, output) => runGuards(input.tool, input.sessionID, directory, output.args),
 })

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export GSD_CORE_SCOPE_ANY=1
 # Behavioral suite for the Artificer-laws honesty check in gsd-phase-gate.cjs (bug gate).
 #   bash gsd-core-hooks/hooks/gsd-phase-gate-laws.test.sh
 set -uo pipefail

@@ -24,12 +24,12 @@ function finish() {
   try {
     const p = JSON.parse(data || '{}');
     const resp = p.tool_response !== undefined ? p.tool_response : (p.error !== undefined ? p.error : p.tool_result);
-    if (q.responseIsQuotaBlocked(resp)) {
+    if (q.blockReasonOf(resp)) {
       q.markBlocked(resp);
       process.stdout.write(JSON.stringify({
         hookSpecificOutput: {
           hookEventName: p.hook_event_name || 'PostToolUse',
-          additionalContext: 'GUARD-BREAKER: ' + q.CODEGRAPH_ROUTE,
+          additionalContext: 'GUARD-BREAKER: ' + q.codegraphRoute(),
         },
       }));
     } else if (p.hook_event_name !== 'PostToolUseFailure' && q.isBlocked()) {

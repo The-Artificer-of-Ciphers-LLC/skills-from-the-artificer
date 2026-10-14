@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Scope: gsd-core only — silent no-op in every other repo (override for tests: GSD_CORE_SCOPE_ANY=1).
+[ "${GSD_CORE_SCOPE_ANY:-}" = 1 ] || git remote -v 2>/dev/null | grep -qiE '[:/]gsd-core(\.git)?/?[[:space:]]' || exit 0
 # PreToolUse(Bash) guard for gsd-test invocations. Three independent false-green
 # traps, each verified against a real incident on 2026-07-17 (issue #2335 work):
 #

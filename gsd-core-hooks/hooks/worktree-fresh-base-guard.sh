@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Scope: gsd-core only — silent no-op in every other repo (override for tests: GSD_CORE_SCOPE_ANY=1).
+[ "${GSD_CORE_SCOPE_ANY:-}" = 1 ] || git remote -v 2>/dev/null | grep -qiE '[:/]gsd-core(\.git)?/?[[:space:]]' || exit 0
 # PreToolUse guard: a worktree is NEVER created off a stale trunk.
 #
 # Incident that motivated it (2026-09-10): the main checkout sat on `next` at
@@ -112,9 +114,9 @@ if [ "$tool" = "Bash" ]; then
   # worktree add …`); gating those demands an origin/next the other repo
   # cannot have. Stand down ONLY when the target is PROVEN to be another
   # repository: a git repo with at least one remote and no remote pointing at
-  # open-gsd/gsd-core. Unknown (not a repo, no remotes, unreadable) keeps the
+  # [^/:]+/gsd-core. Unknown (not a repo, no remotes, unreadable) keeps the
   # gate on.
-  GSD_CORE_SLUG_RE='(^|[:/])open-gsd/gsd-core(\.git)?/?$'
+  GSD_CORE_SLUG_RE='(^|[:/])[^/:]+/gsd-core(\.git)?/?$'
   dir_is_other_repo() {
     local d="$1" urls
     [ -n "$d" ] && [ -d "$d" ] || return 1
