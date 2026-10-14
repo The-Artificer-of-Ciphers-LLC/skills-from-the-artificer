@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Scope: gsd-core only — silent no-op in every other repo (override for tests: GSD_CORE_SCOPE_ANY=1).
+[ "${GSD_CORE_SCOPE_ANY:-}" = 1 ] || git remote -v 2>/dev/null | grep -qiE '[:/]gsd-core(\.git)?/?[[:space:]]' || exit 0
 # PreToolUse(Bash) gate — machine-enforced. Cannot be satisfied by prose,
 # intent, or assertion; only by an actual passing gsd-test run on THIS commit.
 #
@@ -179,10 +181,10 @@ is_git_push() {
 # (`cd <other> && git push`, `gh … --repo other/repo`); gating those demands a
 # gsd-test pass or an origin/next that the other repo cannot have. Stand down
 # ONLY when the target is PROVEN to be another repository: a git repo with at
-# least one remote and no remote pointing at open-gsd/gsd-core, or an explicit
+# least one remote and no remote pointing at [^/:]+/gsd-core, or an explicit
 # gh --repo/-R naming a different repo. Unknown (not a repo, no remotes,
 # unreadable) keeps the gate on.
-GSD_CORE_SLUG_RE='(^|[:/])open-gsd/gsd-core(\.git)?/?$'
+GSD_CORE_SLUG_RE='(^|[:/])[^/:]+/gsd-core(\.git)?/?$'
 dir_is_other_repo() {
   local d="$1" urls
   [ -n "$d" ] && [ -d "$d" ] || return 1
@@ -196,9 +198,9 @@ gh_repo_flag() {  # prints EVERY gh --repo/-R (or --repo=) value, one per line, 
   printf '%s' "$cmd" | grep -oE '(^|[[:space:]])(--repo|-R)(=|[[:space:]]+)[^[:space:];&|]+' | sed -E 's/^[[:space:]]*(--repo|-R)(=|[[:space:]]+)//; s/^["'"'"']//; s/["'"'"']$//' || true
 }
 # ONLY "other" if there is at least one --repo/-R value AND every one of them
-# normalizes to something other than open-gsd/gsd-core. A single gsd-core
+# normalizes to something other than [^/:]+/gsd-core. A single gsd-core
 # value anywhere in the command (e.g. a chained `gh pr merge … --repo
-# open-gsd/gsd-core` after an earlier `gh … --repo other/x`) proves the
+# [^/:]+/gsd-core` after an earlier `gh … --repo other/x`) proves the
 # command is not confined to another repo, so it returns 1 (keep gating).
 gh_repo_is_other() {
   local flags r any=0
@@ -208,7 +210,7 @@ gh_repo_is_other() {
     [ -n "$r" ] || continue
     any=1
     r="$(printf '%s' "$r" | tr 'A-Z' 'a-z' | sed -E 's#^https?://github\.com/##; s#\.git$##; s#/$##')"
-    [ "$r" != "open-gsd/gsd-core" ] || return 1
+    [ "$r" != "[^/:]+/gsd-core" ] || return 1
   done <<< "$flags"
   [ "$any" = "1" ]
 }
@@ -283,7 +285,7 @@ push_is_other() {
 }
 
 # gh has no `-C`; an explicit --repo/-R decides alone (even if cwd is
-# elsewhere — `--repo open-gsd/gsd-core` must NOT be skipped just because cwd
+# elsewhere — `--repo [^/:]+/gsd-core` must NOT be skipped just because cwd
 # is another repo). Otherwise, same closure as push_is_other keyed on the
 # first-segment `cd` rule (there is no per-segment `-C` equivalent for gh).
 pr_is_other() {

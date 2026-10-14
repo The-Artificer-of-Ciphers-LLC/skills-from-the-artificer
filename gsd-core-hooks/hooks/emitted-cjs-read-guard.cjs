@@ -1,6 +1,16 @@
 #!/usr/bin/env node
 'use strict';
 
+// Scope: gsd-core only — silent no-op in every other repo (override for tests: GSD_CORE_SCOPE_ANY=1).
+if (process.env.GSD_CORE_SCOPE_ANY !== '1') {
+  let inGsdCore = false;
+  try {
+    const remotes = require('node:child_process').execFileSync('git', ['remote', '-v'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    inGsdCore = /[:/]gsd-core(\.git)?\/?\s/i.test(remotes);
+  } catch { /* not a repo / no git => not gsd-core */ }
+  if (!inGsdCore) process.exit(0);
+}
+
 /**
  * emitted-cjs-read-guard.cjs — PreToolUse(Read|Edit|Write|NotebookEdit) gate.
  *

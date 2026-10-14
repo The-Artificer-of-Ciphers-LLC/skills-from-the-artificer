@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export GSD_CORE_SCOPE_ANY=1
 # Behavioral suite for gsd-merge-authority-guard.cjs (author rule + core gates). `gh` is faked.
 #   bash gsd-core-hooks/hooks/gsd-merge-authority-guard.test.sh
 set -uo pipefail

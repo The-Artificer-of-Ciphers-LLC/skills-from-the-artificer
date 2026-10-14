@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export GSD_CORE_SCOPE_ANY=1
 # Behavioral suite for require-memtrace-evidence.sh (quota-marker gate).
 #   bash gsd-core-hooks/hooks/require-memtrace-evidence.test.sh
 set -uo pipefail

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export GSD_CORE_SCOPE_ANY=1
 # Behavioral suite for gsd-test-single-flight-guard.sh (bench-scoped conflicts). `ps` is faked.
 #   bash gsd-core-hooks/hooks/gsd-test-single-flight-guard.test.sh
 set -uo pipefail

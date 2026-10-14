@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Scope: gsd-core only — silent no-op in every other repo (override for tests: GSD_CORE_SCOPE_ANY=1).
+[ "${GSD_CORE_SCOPE_ANY:-}" = 1 ] || git remote -v 2>/dev/null | grep -qiE '[:/]gsd-core(\.git)?/?[[:space:]]' || exit 0
 # PreToolUse(Bash) guard: a FOREGROUND poll loop -- `while`/`until`/`for` combined
 # with a command-position `sleep >= 10s` -- is killed at the Bash tool's hard
 # 600000ms ceiling with exit 137. That kill is INDISTINGUISHABLE from the

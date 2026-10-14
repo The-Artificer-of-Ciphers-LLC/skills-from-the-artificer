@@ -8,6 +8,8 @@
 # VERBATIM from gsd-async-poll-guard.sh, which itself documents copying from
 # gsd-test-clean-tree-guard.sh -- same convention.
 set -euo pipefail
+# Scope: gsd-core only — silent no-op in every other repo (override for tests: GSD_CORE_SCOPE_ANY=1).
+[ "${GSD_CORE_SCOPE_ANY:-}" = 1 ] || git remote -v 2>/dev/null | grep -qiE '[:/]gsd-core(\.git)?/?[[:space:]]' || exit 0
 
 input="$(cat)"
 cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null || true)"

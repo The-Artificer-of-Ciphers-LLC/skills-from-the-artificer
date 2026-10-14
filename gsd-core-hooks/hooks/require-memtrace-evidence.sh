@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Scope: gsd-core only — silent no-op in every other repo (override for tests: GSD_CORE_SCOPE_ANY=1).
+[ "${GSD_CORE_SCOPE_ANY:-}" = 1 ] || git remote -v 2>/dev/null | grep -qiE '[:/]gsd-core(\.git)?/?[[:space:]]' || exit 0
 # require-memtrace-evidence.sh — PreToolUse(Bash) gate
 #
 # Blocks `gh pr review --approve` and `gh pr review --request-changes` unless
