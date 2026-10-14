@@ -18,7 +18,7 @@ A collection of [Claude Code](https://docs.claude.com/en/docs/claude-code/overvi
 
 ### Migrated from the Mac mini (Swift/iOS, App Store Connect, ADR coverage)
 
-Some of these originate upstream (e.g. the `swiftui-*` and `asc-*` sets); they're collected here so one install covers every machine.
+Some of these originate upstream (e.g. the `swiftui-*` and `asc-*` sets); they're collected here so one install covers every machine. The Dimillian/Skills set (`swiftui-ui-patterns`, `swiftui-liquid-glass`, `swiftui-performance-audit`, `ios-debugger-agent`, …) is deliberately not vendored — install it from [upstream](https://github.com/Dimillian/Skills).
 
 | Skill | What it does |
 |---|---|
@@ -45,17 +45,13 @@ Some of these originate upstream (e.g. the `swiftui-*` and `asc-*` sets); they'r
 | [`asc-xcode-build/`](asc-xcode-build/) | Build, archive, and export iOS/macOS apps with xcodebuild before uploading to App Store Connect. Use when you need to create an IPA or PKG… |
 | [`developing-ios-apps/`](developing-ios-apps/) | Develops iOS/macOS applications with XcodeGen, SwiftUI, and SPM. Handles Apple Developer signing, notarization, and CI/CD pipelines.… |
 | [`ios-accessibility/`](ios-accessibility/) | Implements, reviews, or improves accessibility in iOS/macOS apps with SwiftUI, UIKit, and AppKit. Use when adding VoiceOver, Voice Control,… |
-| [`ios-debugger-agent/`](ios-debugger-agent/) | Use XcodeBuildMCP to build, run, launch, and debug the current iOS project on a booted simulator. Trigger when asked to run an iOS app,… |
 | [`mobile-ios-design/`](mobile-ios-design/) | Master iOS Human Interface Guidelines and SwiftUI patterns for building native iOS apps. Use when designing iOS interfaces, implementing… |
 | [`swift-concurrency/`](swift-concurrency/) | Diagnose Swift Concurrency issues, refactor callback-based code to async/await, and guide Swift 6 migration when working with tasks,… |
 | [`swift-mcp-server-generator/`](swift-mcp-server-generator/) | Generate a complete Model Context Protocol server project in Swift using the official MCP Swift SDK package. |
 | [`swift-testing-expert/`](swift-testing-expert/) | Expert guidance for Swift Testing: test structure, #expect/#require macros, traits and tags, parameterized tests, test plans, parallel… |
 | [`swiftdata/`](swiftdata/) | Implement, review, or improve data persistence using SwiftData. Use when defining @Model classes with @Attribute, @Relationship,… |
 | [`swiftui-expert-skill/`](swiftui-expert-skill/) | Use when writing, reviewing, or refactoring SwiftUI code for iOS or macOS, including state management, view composition, performance,… |
-| [`swiftui-liquid-glass/`](swiftui-liquid-glass/) | Implement, review, or improve SwiftUI features using the iOS 26+ Liquid Glass API. Use when asked to adopt Liquid Glass in new SwiftUI UI,… |
-| [`swiftui-performance-audit/`](swiftui-performance-audit/) | Audit and improve SwiftUI runtime performance from code review and architecture. Use for requests to diagnose slow rendering, janky… |
 | [`swiftui-pro/`](swiftui-pro/) | Comprehensively reviews SwiftUI code for best practices on modern APIs, maintainability, and performance. Use when reading, writing, or… |
-| [`swiftui-ui-patterns/`](swiftui-ui-patterns/) | Best practices and example-driven guidance for building SwiftUI views and components, including navigation hierarchies, custom view… |
 | [`xcodebuildmcp-cli/`](xcodebuildmcp-cli/) | Official skill for the XcodeBuildMCP CLI. Use when doing iOS/macOS/watchOS/tvOS/visionOS work (build, test, run, debug, log, UI automation). |
 | [`test-orphan-guard/`](test-orphan-guard/) | Reaps orphaned test-runner processes left behind by agent test runs; ships a guarded test wrapper, a Stop-hook entry, and shell integration. |
 | [`no-defer/`](no-defer/) | Prevents an agent from deferring, postponing, or skipping parts of a task — every item must be completed before reporting done. |
