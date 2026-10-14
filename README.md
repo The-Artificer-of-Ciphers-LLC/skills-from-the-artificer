@@ -57,6 +57,8 @@ Some of these originate upstream (e.g. the `swiftui-*` and `asc-*` sets); they'r
 | [`swiftui-pro/`](swiftui-pro/) | Comprehensively reviews SwiftUI code for best practices on modern APIs, maintainability, and performance. Use when reading, writing, or… |
 | [`swiftui-ui-patterns/`](swiftui-ui-patterns/) | Best practices and example-driven guidance for building SwiftUI views and components, including navigation hierarchies, custom view… |
 | [`xcodebuildmcp-cli/`](xcodebuildmcp-cli/) | Official skill for the XcodeBuildMCP CLI. Use when doing iOS/macOS/watchOS/tvOS/visionOS work (build, test, run, debug, log, UI automation). |
+| [`test-orphan-guard/`](test-orphan-guard/) | Reaps orphaned test-runner processes left behind by agent test runs; ships a guarded test wrapper, a Stop-hook entry, and shell integration. |
+| [`no-defer/`](no-defer/) | Prevents an agent from deferring, postponing, or skipping parts of a task — every item must be completed before reporting done. |
 
 ## Not a skill
 

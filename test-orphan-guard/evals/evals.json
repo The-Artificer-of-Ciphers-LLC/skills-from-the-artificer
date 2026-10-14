@@ -1,0 +1,23 @@
+{
+  "skill_name": "test-orphan-guard",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "my mac is crawling and the fans are screaming — activity monitor shows like a dozen node processes all eating cpu and they're all from `node --test`. i'm not running any tests right now. can you find the dead ones and kill them without nuking my mcp servers or my editor?",
+      "expected_output": "Enumerates node processes (via pgrep, not ps -ax), identifies the leftover/runaway `node --test` ones (PPID==1 orphans and/or high-CPU-for-minutes runaways), shows them before killing, kills them with TERM then KILL, and explicitly leaves MCP servers / node_repl / editor node alone. Ideally uses or references the skill's reaper with a dry-run first.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "i just ran the unit suite and it said it finished but there are still a bunch of node --test processes hanging around afterward. clean them up, and i don't want this to keep happening every time i run tests.",
+      "expected_output": "Reaps the existing leftover `node --test` processes (cure), AND addresses recurrence: recommends/installs the prevention path (guarded runner + shell integration so future `node --test` runs can't leak, and/or the stop-hook). Distinguishes the one-time cleanup from the durable fix.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "run the node test suite for me but make sure it doesn't leave a pile of orphaned node processes behind this time like it did yesterday",
+      "expected_output": "Runs the tests through the guarded runner (guarded-test.sh) so the whole process group is torn down on exit regardless of pass/fail, rather than a bare `node --test`. Optionally reaps any pre-existing strays first. Confirms no leftovers remain after the run.",
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "_note": "APPEND the `entry` object below into the EXISTING hooks.Stop array in ~/.claude/settings.json. Do NOT replace the array — it already contains the gsd-context-monitor Stop hook. The `update-config` skill can merge this safely. timeout is in seconds; the reaper's worst case (two CPU samples + SIGTERM grace + SIGKILL grace) is well under 15s.",
+  "entry": {
+    "hooks": [
+      {
+        "type": "command",
+        "command": "\"$HOME/.claude/skills/test-orphan-guard/scripts/reap-test-orphans.sh\" --quiet",
+        "timeout": 15
+      }
+    ]
+  },
+  "_resulting_shape_example": {
+    "hooks": {
+      "Stop": [
+        { "hooks": [ { "type": "command", "command": "\"/opt/homebrew/bin/node\" \"$HOME/.claude/hooks/gsd-context-monitor.js\"", "timeout": 10 } ] },
+        { "hooks": [ { "type": "command", "command": "\"$HOME/.claude/skills/test-orphan-guard/scripts/reap-test-orphans.sh\" --quiet", "timeout": 15 } ] }
+      ]
+    }
+  }
+}
