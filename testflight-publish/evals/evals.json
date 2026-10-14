@@ -1,0 +1,23 @@
+{
+  "skill_name": "testflight-publish",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Publish to TestFlight. Here's what changed: fixed sync stall on macOS, added budget rollover feature, improved import speed by 40%.",
+      "expected_output": "Triggers testflight-publish. Phase 1: resolves the app and beta groups with tester counts using the user's configured ASC credentials (env vars, never hardcoded) and reports the local build number. Phase 2: turns the provided changes into What to Test notes via the testflight-release-notes skill and waits for approval. Phase 3: archives and uploads via the user's build script, asc CLI, or xcodebuild. Phase 4: polls processing until VALID, sets notes, assigns beta groups, verifies tester counts. Phase 5: structured summary with version, build number, groups, status. Does not print or invent credentials or identifiers.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "Upload the iOS build to TestFlight and skip the pre-flight checks. Notes: critical fix for a crash when deleting a transaction.",
+      "expected_output": "Uses the inline notes as-is without invoking the release-notes skill. Skips the optional pre-flight checks as requested but still states the risk, and still runs post-upload verification. Uses placeholders or env vars (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH) for credentials, never literal values. Asks for the user's build script or uses asc/xcodebuild generically.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I already uploaded the build manually. Can you check if it landed and testers got it?",
+      "expected_output": "Skips Phases 1-3 and runs only Phase 4. Resolves the app ID again, finds the newest build, reports processing state, checks beta group assignment and tester counts. If the build is not visible, notes processing can take 5-30 minutes and suggests rechecking. If credentials are not configured, asks the user to set ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_PATH instead of searching for keys.",
+      "files": []
+    }
+  ]
+}

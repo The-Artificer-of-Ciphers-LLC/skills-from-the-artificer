@@ -57,6 +57,19 @@ Some of these originate upstream (e.g. the `swiftui-*` and `asc-*` sets); they'r
 | [`no-defer/`](no-defer/) | Prevents an agent from deferring, postponing, or skipping parts of a task — every item must be completed before reporting done. |
 | [`swift-agents/`](swift-agents/) | **Swift agent team (fork of [Techopolis/swift-agents](https://github.com/Techopolis/swift-agents), MIT).** `swift-lead` orchestrator plus 15 specialist subagents (concurrency, SwiftUI, SwiftData, StoreKit, accessibility, on-device AI, …) and a hook that delegates Swift tasks to the lead. Installs to `~/.claude/agents/`, not `skills/`; see its README. Upstream last updated March 2026; maintained here. Fork: [The-Artificer-of-Ciphers-LLC/swift-agents](https://github.com/The-Artificer-of-Ciphers-LLC/swift-agents). |
 
+### Debugging, release and money-handling workflow (generalized from a production iOS project)
+
+| Skill | What it does |
+|---|---|
+| [`fix-regression-guard/`](fix-regression-guard/) | Mandatory regression analysis before committing a bug fix. Use before any fix commit, after any change to a guard, condition, ownership check, or… |
+| [`post-fix-trace/`](post-fix-trace/) | Second-pass regression trace after a bug fix, to catch what the fix itself broke. Use after completing a fix from your debug workflow (trace-based… |
+| [`debug-test-capture/`](debug-test-capture/) | Turns a finished debug session into permanent regression tests. Use right after a bug fix is verified or committed: after a post-fix regression trace… |
+| [`trace-fix/`](trace-fix/) | Evidence-gated debugging protocol for iOS/macOS and Swift apps: trace the execution path, locate the exact divergence, prove the root cause, and only… |
+| [`work-journal/`](work-journal/) | Record and recall per-branch session decisions across sessions and agent worktrees using an append-only local markdown journal. Use at the end of… |
+| [`testflight-publish/`](testflight-publish/) | Orchestrates an end-to-end TestFlight release: pre-flight checks, archive, upload to App Store Connect, waiting for build processing, distributing to… |
+| [`testflight-release-notes/`](testflight-release-notes/) | Writes tester-facing TestFlight "What to Test" notes and App Store "What's New" release notes from raw developer input such as a git log since the… |
+| [`money-boundary-judgment/`](money-boundary-judgment/) | How to cross an API that forces Double (framework parameters, chart plot values, any Double-only library) without breaking a "Decimal for money"… |
+
 ## Not a skill
 
 | Directory | What it is |
