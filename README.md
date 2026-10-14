@@ -59,6 +59,7 @@ Some of these originate upstream (e.g. the `swiftui-*` and `asc-*` sets); they'r
 | [`xcodebuildmcp-cli/`](xcodebuildmcp-cli/) | Official skill for the XcodeBuildMCP CLI. Use when doing iOS/macOS/watchOS/tvOS/visionOS work (build, test, run, debug, log, UI automation). |
 | [`test-orphan-guard/`](test-orphan-guard/) | Reaps orphaned test-runner processes left behind by agent test runs; ships a guarded test wrapper, a Stop-hook entry, and shell integration. |
 | [`no-defer/`](no-defer/) | Prevents an agent from deferring, postponing, or skipping parts of a task — every item must be completed before reporting done. |
+| [`swift-agents/`](swift-agents/) | **Swift agent team (fork of [Techopolis/swift-agents](https://github.com/Techopolis/swift-agents), MIT).** `swift-lead` orchestrator plus 15 specialist subagents (concurrency, SwiftUI, SwiftData, StoreKit, accessibility, on-device AI, …) and a hook that delegates Swift tasks to the lead. Installs to `~/.claude/agents/`, not `skills/`; see its README. Upstream last updated March 2026; maintained here. Fork: [The-Artificer-of-Ciphers-LLC/swift-agents](https://github.com/The-Artificer-of-Ciphers-LLC/swift-agents). |
 
 ## Not a skill
 
