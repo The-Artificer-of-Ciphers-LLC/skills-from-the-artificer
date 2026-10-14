@@ -31,6 +31,8 @@ Keep on opus (the orchestrator):
 - Synthesis across multiple subagent outputs
 - User-facing explanations and recommendations
 
+**Tool split (CodeGraph first, Memtrace for heavy hits).** Use CodeGraph (`codegraph_explore` / `codegraph` CLI) for symbol lookup, file reads, callers/callees, and ordinary blast radius. Reserve Memtrace (and cortex) for git history/evolution, `recall_decision`, cross-repo/API topology, risky blast radius (`get_impact`), PR review evidence, and dead code/complexity, because Memtrace costs quota. If `~/.claude/state/memtrace-quota.json` says `blocked` with a future `until`, never call Memtrace; use CodeGraph until that time.
+
 ## The dispatch pattern
 
 When you (opus) recognize a routable task:

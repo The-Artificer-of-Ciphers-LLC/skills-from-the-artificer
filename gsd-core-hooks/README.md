@@ -110,6 +110,10 @@ Every hook here assumes pieces of gsd-core's specific toolchain. At minimum:
 - **Memtrace.** `require-memtrace-evidence.sh` assumes the Memtrace MCP server is installed and
   indexing your repo. Without it, either point it at your own code-discovery tool or drop it — a
   guard that demands a tool you don't have just denies everything.
+  The CodeGraph-evidence fallback is no longer self-attested: the gate reads the quota marker
+  (`${MEMTRACE_QUOTA_STATE:-~/.claude/state/memtrace-quota.json}`, `{blocked, until}` with `until` in ms epoch)
+  and accepts `### CodeGraph Evidence` only while `blocked` is true and `until` is in the future; a missing or
+  unparseable marker fails closed to the Memtrace-evidence requirement.
   The Memtrace-first *code-discovery* guard that used to live here was **removed**: it is not
   specific to this project, and a second, more complete implementation of the same rule already
   ships as global policy in [`../claude-guards/`](../claude-guards/), as

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gsd-hook-version: 1.0.0
+// gsd-hook-version: 1.1.0
 //
 // MEMTRACE-CAPABLE DISPATCH GUARD (PreToolUse, matcher "Agent").
 //
@@ -11,6 +11,10 @@
 // INCIDENT (2026-09-29): sonnet-coder (no Memtrace tools) was dispatched for
 // gsd-core source edits it could not perform compliantly; the resulting
 // denials were then routed around instead of reported.
+//
+// While Memtrace is quota-blocked (memtrace-quota-state isBlocked()) the cheap types are
+// ALLOWED: they use the CodeGraph CLI, which has no quota. See
+// docs/research/codegraph-vs-memtrace-routing.md section 9 item 6.
 //
 // Fails OPEN on any internal error (malformed stdin, unresolvable cwd, ...).
 'use strict';
@@ -51,6 +55,21 @@ function inGsdCore(cwd) {
   return c === root || c.startsWith(root + '/');
 }
 
+function quotaState() {
+  let blocked = false;
+  let route = '';
+  try {
+    const q = require('./memtrace-quota-state.cjs');
+    if (typeof q.isBlocked === 'function') blocked = !!q.isBlocked();
+    if (blocked && typeof q.codegraphRoute === 'function') route = String(q.codegraphRoute() || '');
+    if (blocked && !route && typeof q.cooldownInfo === 'function') {
+      const c = q.cooldownInfo();
+      if (c && c.untilIso) route = 'Memtrace returns at ' + c.untilIso + '.';
+    }
+  } catch { /* fail open to existing behavior */ }
+  return { blocked, route };
+}
+
 async function main() {
   const raw = await readStdin(4000);
   if (!raw || !raw.trim()) return allow();
@@ -61,6 +80,8 @@ async function main() {
   const type = typeof input.subagent_type === 'string' ? input.subagent_type.trim().toLowerCase() : '';
   if (!DENIED_TYPES.has(type)) return allow();
   if (!inGsdCore(payload.cwd)) return allow();
+  const quota = quotaState();
+  if (quota.blocked) return allow();
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
@@ -74,9 +95,10 @@ async function main() {
         // guidance and use the `codegraph explore` CLI), :539 (`codegraph node <symbol|file>` reads a
         // file with line numbers), :541-543 (callers/callees/impact CLI), :537 (`query`).
         'If Memtrace is unavailable / quota-exhausted, brief the subagent to use the CodeGraph CLI via ' +
-        'Bash instead: `codegraph query <sym>` (find_symbol), `codegraph explore <q>` (find_code), ' +
+        'Bash instead (no quota): `codegraph query <sym>` (find_symbol), `codegraph explore <q>` (find_code), ' +
         '`codegraph node <file|sym>` (get_source_window / get_symbol_context), `codegraph callers|callees|' +
-        'impact <sym>` (get_impact). Never grep/cat indexed source.',
+        'impact <sym>` (get_impact). Never grep/cat indexed source.' +
+        (quota.route ? ' ' + quota.route : ''),
     },
   }));
 }

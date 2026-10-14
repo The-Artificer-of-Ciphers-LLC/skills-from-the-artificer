@@ -46,7 +46,8 @@
    unavailable, the sweep continues — coordination is advisory (`mediator_mode: "advisory"`), never
    a hard block — but the run log must say so explicitly; a missing fleet is not permission to
    assume the queue is uncontested.
-1. Initialize structural memory once for the whole run: invoke `/memtrace-skills:memtrace-first` to load the bi-temporal graph context.
+1. Initialize structural memory once for the whole run: invoke `/memtrace-skills:memtrace-first` to load the bi-temporal graph context (skip while Memtrace is in a quota cooldown).
+   **Tool split (CodeGraph first, Memtrace for heavy hits).** Use CodeGraph (`codegraph_explore` / `codegraph` CLI) for symbol lookup, file reads, callers/callees, and ordinary blast radius. Reserve Memtrace (and cortex) for git history/evolution, `recall_decision`, cross-repo/API topology, risky blast radius (`get_impact`), PR review evidence, and dead code/complexity, because Memtrace costs quota. If `~/.claude/state/memtrace-quota.json` says `blocked` with a future `until`, never call Memtrace; use CodeGraph until that time.
 1b. **Establish the base-drift baseline once — not per PR.** Call `mcp__memtrace__get_changes_since` (or `mcp__memtrace__get_daily_briefing`, `window_hours` covering the oldest queued PR's `updatedAt`) against `next`. Record the returned `session_anchor` plus the changed files/symbols. Every queued PR is being reviewed against a base that has moved since the contributor last pushed; this snapshot is what §9.4 uses to attribute a red CI run to base drift instead of to the contributor, and computing it once beats re-deriving it inside every PR. `get_changes_since` auto-selects `overview` for a large window and `compound` for a focused one.
 2. Enumerate open PRs not authored by you:
    ```bash

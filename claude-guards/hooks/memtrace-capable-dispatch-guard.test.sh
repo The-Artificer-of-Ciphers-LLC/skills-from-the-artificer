@@ -25,6 +25,7 @@ git -C "$CORE" -c user.email=t@example.com -c user.name=t commit -q --allow-empt
 mkdir -p "$CORE/.claude/worktrees"
 git -C "$CORE" worktree add -q "$WT" -b fixture-wt || exit 1
 export MEMTRACE_DISPATCH_GUARD_ROOT="$CORE"
+export MEMTRACE_QUOTA_STATE="$TMP/quota.json"  # absent = not blocked
 
 decision() { # decision <stdin-text>
   printf '%s' "$1" | node "$GUARD" 2>/dev/null | python3 -c 'import json,sys
@@ -59,6 +60,19 @@ dec_sib=$(printf '%s' "$(payload sonnet-coder "$FAKEHOME/projects/gsd-core-other
 print(json.load(sys.stdin)["hookSpecificOutput"].get("permissionDecision",""))')
 N=$((N+1))
 if [ "$dec_default" = deny ] && [ "$dec_sib" = allow ]; then echo "PASS  default root resolves to \$HOME/projects/gsd-core"; else F=$((F+1)); echo "FAIL  default root -> in=$dec_default sibling=$dec_sib"; fi
+
+# Quota-blocked: cheap agent types are allowed (CodeGraph CLI has no quota).
+node -e 'require("fs").writeFileSync(process.env.MEMTRACE_QUOTA_STATE, JSON.stringify({blocked:true,ts:Date.now(),until:Date.now()+3600e3}))'
+for T in sonnet-coder haiku-scout haiku-importer; do
+  expect "$T in gsd-core while Memtrace blocked -> allow" allow "$(payload $T $CORE)"
+done
+rm -f "$MEMTRACE_QUOTA_STATE"
+expect "sonnet-coder after state cleared -> deny" deny "$(payload sonnet-coder $CORE)"
+N=$((N+1))
+if printf '%s' "$(payload haiku-scout $CORE)" | node "$GUARD" 2>/dev/null | grep -q 'codegraph query'; then echo "PASS  deny text carries CodeGraph CLI brief"; else F=$((F+1)); echo "FAIL  deny text lacks CodeGraph CLI brief"; fi
+node -e 'require("fs").writeFileSync(process.env.MEMTRACE_QUOTA_STATE, JSON.stringify({blocked:true,ts:Date.now(),until:Date.now()-1000}))'
+expect "expired block state -> deny" deny "$(payload sonnet-coder $CORE)"
+rm -f "$MEMTRACE_QUOTA_STATE"
 
 echo
 echo "memtrace-capable-dispatch-guard suite: $((N-F))/$N passed"

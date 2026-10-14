@@ -24,6 +24,8 @@ Before reaching for any tool, run this classifier against the incoming request:
 3. **Is the user asking "should we", "why", "what are the tradeoffs", "design X"?** → **architect**. Stay in-context (you ARE opus) or dispatch with `model: "opus"`.
 4. **Mixed?** → split. Scout first to gather facts, then re-classify the next step. Never bundle scout work into an architect dispatch.
 
+**Tool split (CodeGraph first, Memtrace for heavy hits).** Use CodeGraph (`codegraph_explore` / `codegraph` CLI) for symbol lookup, file reads, callers/callees, and ordinary blast radius. Reserve Memtrace (and cortex) for git history/evolution, `recall_decision`, cross-repo/API topology, risky blast radius (`get_impact`), PR review evidence, and dead code/complexity, because Memtrace costs quota. If `~/.claude/state/memtrace-quota.json` says `blocked` with a future `until`, never call Memtrace; use CodeGraph until that time.
+
 If the answer to #1 is yes and you find yourself reaching for Read / Grep / Glob in the main context anyway — STOP. That is the violation this skill exists to prevent.
 
 ## Dispatch templates

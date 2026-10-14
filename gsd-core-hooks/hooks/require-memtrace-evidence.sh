@@ -58,32 +58,48 @@ if [ -z "$body" ]; then
   deny "MEMTRACE EVIDENCE GATE: gh pr review --approve/--request-changes requires a --body-file whose content includes a '### Memtrace Evidence' section. No body found. Run the Memtrace pipeline (get_impact, get_symbol_context, recall_decision, find_code_review_issues on the PR's changed symbols), document findings in the section, then re-post."
 fi
 
-# CodeGraph fallback (Memtrace unavailable / quota-exhausted). Accepted ONLY when the
-# body carries BOTH a '### CodeGraph Evidence' section AND an explicit
-# 'Memtrace unavailable:' line stating why. Per-tool equivalents, cited to
+# CodeGraph fallback (Memtrace over quota). Accepted ONLY when the quota marker
+# ${MEMTRACE_QUOTA_STATE:-$HOME/.claude/state/memtrace-quota.json} says blocked==true with
+# until (ms epoch) in the future. A self-attested line is NOT accepted; a missing or
+# unparseable marker fails closed to the Memtrace-evidence requirement below.
+# Per-tool equivalents, cited to
 # https://github.com/colbymchenry/codegraph @6560052 README.md:
 #   get_impact         -> `codegraph impact <symbol>`            (README.md:543; MCP codegraph_impact, :590)
 #   get_symbol_context -> `codegraph callers|callees <symbol>`   (README.md:541-542; MCP codegraph_callers/
 #                         or `codegraph node <symbol>`            callees, :590; node = README.md:539)
-#   recall_decision, find_code_review_issues: NO CodeGraph equivalent (README.md:537-547 lists no
-#   decision-memory or review command); they are waived only via the 'Memtrace unavailable:' line.
+#   recall_decision, find_code_review_issues: NO CodeGraph equivalent (README.md:537-547); waived
+#   while the quota cooldown is live.
 # CLI commands are always available; the MCP forms need CODEGRAPH_MCP_TOOLS (README.md:590).
+quota_until_iso() { # prints ISO time, returns 0 only if marker is blocked with a future until
+  python3 - "${MEMTRACE_QUOTA_STATE:-$HOME/.claude/state/memtrace-quota.json}" <<'PY' 2>/dev/null
+import json, sys, time, datetime
+try:
+    d = json.load(open(sys.argv[1]))
+    u = d.get("until")
+    if d.get("blocked") is not True or isinstance(u, bool) or not isinstance(u, (int, float)): sys.exit(1)
+    if u <= time.time() * 1000: sys.exit(1)
+    print(datetime.datetime.fromtimestamp(u / 1000, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+except Exception:
+    sys.exit(1)
+PY
+}
 if printf '%s' "$body" | grep -q '### CodeGraph Evidence' && ! printf '%s' "$body" | grep -q '### Memtrace Evidence'; then
-  if ! printf '%s' "$body" | grep -qE '^Memtrace unavailable:[[:space:]]*\S'; then
-    deny "CODEGRAPH EVIDENCE GATE: '### CodeGraph Evidence' is accepted only as a fallback and requires a line 'Memtrace unavailable: <reason>' (e.g. quota exhausted) in the review body."
+  if ! until_iso="$(quota_until_iso)"; then
+    deny "CODEGRAPH EVIDENCE GATE: Memtrace is not in a quota cooldown; run the Memtrace tools (get_impact, get_symbol_context, recall_decision, find_code_review_issues) and use a '### Memtrace Evidence' section. '### CodeGraph Evidence' is accepted only while the quota marker (~/.claude/state/memtrace-quota.json) says blocked with a future until."
   fi
   cg_missing=""
   printf '%s' "$body" | grep -qE 'codegraph[_ ]impact' || cg_missing="${cg_missing} codegraph_impact(codegraph impact)"
   printf '%s' "$body" | grep -qE 'codegraph[_ ](callers|callees|node)' || cg_missing="${cg_missing} codegraph_callers|callees|node"
   if [ -n "$cg_missing" ]; then
-    deny "CODEGRAPH EVIDENCE GATE: '### CodeGraph Evidence' is missing:${cg_missing}. Run \`codegraph impact <symbol>\` (get_impact equivalent, README.md:543) and \`codegraph callers|callees|node <symbol>\` (get_symbol_context equivalent, README.md:539-542) on the PR's changed symbols and document target + finding. recall_decision / find_code_review_issues have no CodeGraph equivalent and are waived by the 'Memtrace unavailable:' line."
+    deny "CODEGRAPH EVIDENCE GATE: '### CodeGraph Evidence' is missing:${cg_missing}. Run \`codegraph impact <symbol>\` (get_impact equivalent, README.md:543) and \`codegraph callers|callees|node <symbol>\` (get_symbol_context equivalent, README.md:539-542) on the PR's changed symbols and document target + finding. recall_decision / find_code_review_issues have no CodeGraph equivalent and are waived while the Memtrace quota cooldown is live."
   fi
+  jq -n --arg c "Memtrace quota cooldown is live; CodeGraph evidence accepted. Memtrace returns at ${until_iso}." '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$c}}'
   exit 0
 fi
 
 # Check for the Memtrace Evidence section header
 if ! printf '%s' "$body" | grep -q '### Memtrace Evidence'; then
-  deny "MEMTRACE EVIDENCE GATE: Review body is missing the required '### Memtrace Evidence' section. The Batch PR Review Directive (Phase B §1.11/§2/§3A.7/§4A/§4C) mandates Memtrace graph analysis for every PR review. Run the required tools against the PR's changed symbols and add the section documenting: get_impact (blast radius), get_symbol_context (callers/callees), recall_decision (recorded decisions/bans), find_code_review_issues (deterministic AST+graph review). If Memtrace is unavailable / quota-exhausted, use a '### CodeGraph Evidence' section instead (codegraph impact + codegraph callers|callees|node) plus a 'Memtrace unavailable: <reason>' line."
+  deny "MEMTRACE EVIDENCE GATE: Review body is missing the required '### Memtrace Evidence' section. The Batch PR Review Directive (Phase B §1.11/§2/§3A.7/§4A/§4C) mandates Memtrace graph analysis for every PR review. Run the required tools against the PR's changed symbols and add the section documenting: get_impact (blast radius), get_symbol_context (callers/callees), recall_decision (recorded decisions/bans), find_code_review_issues (deterministic AST+graph review). '### CodeGraph Evidence' (codegraph impact + codegraph callers|callees|node) is accepted instead only while the Memtrace quota marker says blocked with a future until."
 fi
 
 # Check for each required tool name in the evidence section
