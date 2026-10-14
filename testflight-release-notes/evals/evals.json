@@ -1,0 +1,23 @@
+{
+  "skill_name": "testflight-release-notes",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Write testflight notes for build 120. Here's the git log:\n\n1111111 docs: update contributing guide\n2222222 fix: dashboard gauge showing wrong remaining amount after category reassignment\n3333333 refactor: extract shared logic into helper module\n4444444 refactor: deduplicate formatter instances\n5555555 fix: crash on iPhone when rotating device during onboarding\n6666666 feat: add haptic feedback on successful save\n7777777 chore: update Package.resolved\n8888888 fix: iPad sidebar selection not highlighting current section\n9999999 fix: VoiceOver skipping status badge on dashboard\naaaaaaa ci: add macOS destination to test matrix\nbbbbbbb feat: shake-to-undo on edit screen\nccccccc merge: merge branch 'fix/cleanup' into beta",
+      "expected_output": "Plain text notes starting with 'Build 120', with WHAT'S NEW (haptic feedback, shake-to-undo) and BUG FIXES (dashboard gauge, rotation crash, iPad sidebar, VoiceOver badge). Filters out docs, refactor, chore, ci and merge commits. No markdown symbols, under 4,000 characters.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "testflight release notes: minor bug fixes and performance improvements",
+      "expected_output": "Minimal but useful plain-text notes from sparse input, with a reasonable BUG FIXES or IMPROVEMENTS section and no invented specifics or build number. Ends with a brief friendly tip about sharing more detail next time. No markdown.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Can you write release notes for our TestFlight build? Here's what we shipped:\n\n- Sharing is now live! Users can create a group, invite members via link, and designate shared items. Each member sees only their own data unless an item is explicitly shared.\n- Rebuilt the category management screen with drag-to-reorder, nested subcategories up to 3 levels, and a new color picker.\n- Fixed an issue where notifications fired immediately on fresh installs instead of waiting for 30 days of data\n- The forecast chart now handles months with no income instead of showing a blank chart\n- Known issue: the invite link sometimes takes up to 60 seconds to generate on slow connections\n- Please exercise the sharing flow end-to-end, especially shared item designation and that privacy boundaries hold\n- Fixed a rare crash on macOS when resizing the window while a simulator view was animating\n- Improved launch time by about 400ms on older iPhones",
+      "expected_output": "Well-structured plain-text notes with WHAT'S NEW (sharing, category rebuild), IMPROVEMENTS (forecast chart, launch time), BUG FIXES (notifications on fresh install, macOS crash), KNOWN ISSUES (invite link delay), WHAT TO TEST (sharing flow, privacy boundaries). No markdown, under 4,000 characters, no build line since none was given.",
+      "files": []
+    }
+  ]
+}
