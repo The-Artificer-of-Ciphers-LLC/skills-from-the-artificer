@@ -60,7 +60,7 @@
 
 > **HALT semantics inside Phase B:** "HALT" = **stop the current `$PR`**, record its outcome in its task, and advance to the next queued PR. It NEVER aborts the batch by itself. The one exception is §9B.5 — a red CI run on `next` *after* a merge this sweep just performed halts the ENTIRE run, not just the one PR, because a broken shared branch invalidates every review still queued behind it. Otherwise, only an unrecoverable auth/tooling failure aborts the whole run.
 
-> **Batch write-action policy:** Any outward write (posting a review, applying/clearing labels, **releasing queued fork CI per §9**, merging per §9B) executes per the steps below, inline, immediately, for every PR — **merging is never batched or deferred to end-of-run.** The single exception is PR-closure for staleness (§1.8) or a losing competing PR (§7): when `AUTONOMOUS` = `false`, those two closure kinds are collected and surfaced for one confirmation at the end (Phase C); when `AUTONOMOUS` = `true`, they execute inline too. Releasing CI is never deferred either: it's routine authorized maintainer work, already gated on a no-blocker verdict by §9, and holding it for confirmation would strand every fork PR on an untested matrix for the whole sweep. **Do not move on to the next queued PR until the current PR reaches a terminal state: posted+merged (§9B), posted+left open (changes-requested / blocked / contested), or a recorded closure.**
+> **Batch write-action policy:** Any outward write (posting a review, applying/clearing labels, **releasing queued fork CI per §9**, merging per §9B) executes per the steps below, inline, immediately, for every PR — **merging is never batched or deferred to end-of-run.** The single exception is PR-closure for staleness (§1.8) or a losing competing PR (§7): when `AUTONOMOUS` = `false`, those two closure kinds are collected and surfaced for one confirmation at the end (Phase C); when `AUTONOMOUS` = `true`, they execute inline too. Releasing CI is never deferred either: it's routine authorized maintainer work, already gated on a no-finding-above-Nit verdict by §9, and holding it for confirmation would strand every fork PR on an untested matrix for the whole sweep. **Do not move on to the next queued PR until the current PR reaches a terminal state: posted+merged (§9B), posted+left open (changes-requested / blocked / contested), or a recorded closure.**
 
 ---
 
@@ -359,8 +359,9 @@ failure as a Blocker finding, rewrite the verdict as `changes-requested`, and po
 never post an approval for a commit whose CI you have not personally watched finish green.
 
 If the tentative verdict already carries any finding (i.e. it was never going to be an Approve),
-post the `changes-requested` review now, per the structure above — §9's CI release for that case
-runs afterward as a courtesy signal for the contributor to push against (unchanged from before).
+post the `changes-requested` review now, per the structure above. §9's CI release for that case
+happens ONLY when every finding is a Nit; with any Blocker/Major/Minor finding, CI stays queued
+(the fix push will trigger it, and releasing now would double the CI cost).
 
 Post-review status updates:
 1. Apply the appropriate GitHub label (`changes-requested` or `approved`).
@@ -369,13 +370,14 @@ Post-review status updates:
 
 ### 9. Release queued fork CI
 **[BLOCKING]** *Using the run IDs recorded in §1.6c. Skip entirely when `pending == 0`. Runs BEFORE
-posting per §8.3 when the tentative verdict is Approve; runs AFTER posting (as a courtesy signal)
-when a `changes-requested` review has already gone out. Either way, this step is where "released"
+posting per §8.3 when the tentative verdict is Approve; runs AFTER posting only when a
+`changes-requested` review carries Nit-only findings (any Blocker/Major/Minor withholds CI —
+see the §9.1 gate). Either way, this step is where "released"
 must become "confirmed complete" — never treat a release itself as a result.*
 
 GitHub holds `pull_request` workflows from forks and first-time contributors at `action_required` until a maintainer releases them. Releasing is **routine authorized maintainer work, not a decision to surface** — but it spends real CI minutes on someone else's branch, so it is gated on the review outcome rather than fired on arrival.
 
-1. **Gate.** Release only if §8's verdict carries **no Blocker-severity findings**. Major/Minor/Nit findings do **not** block the release — the contributor will push a fix and needs a working signal to push against, and a red matrix on a Major-only PR is useful information. A Blocker means the diff is known-wrong; burning a full fork matrix to confirm that wastes minutes and buries the real finding under CI noise. On a Blocker, say so plainly in the review ("CI runs left queued — release once the blocker is addressed") and stop here.
+1. **Gate.** Release only if §8's verdict carries **no findings above Nit** — i.e. no Blocker, no Major, no Minor. Nit-only findings do not block the release. **Any Blocker/Major/Minor finding withholds CI.** The contributor must push a fix for it regardless, and that push re-triggers the full matrix, so releasing now spends the CI cost twice (once on a diff already known to need changes, once on the fix). On any finding above Nit, say so plainly in the review ("CI runs left queued — release once the Blocker/Major/Minor findings are addressed") and stop here.
 2. **Release** each recorded run:
    ```bash
    gh api --method POST repos/open-gsd/gsd-core/actions/runs/<run_id>/approve
@@ -468,7 +470,7 @@ approved, one at a time, before touching the next queued PR.*
 
 A rebase-push is **not** a neutral housekeeping act. It force-updates a contributor's branch, rewrites their history, and triggers their full CI matrix. It is therefore gated exactly like a CI release, on the same verdict, for the same reason.
 
-1. **Gate.** Push a rebase only if §8's verdict carries **no Blocker-severity findings**. On a Blocker, **do not push it** — the contributor is going to push again anyway to fix the blocker, and their rebase will pick the base up for free. Instead, put the rebase instruction in the review body (`git fetch origin next && git rebase origin/next`) and state what it fixes. Rebasing a known-wrong diff spends a fork CI matrix to prove nothing and rewrites someone's branch under them while they are mid-fix.
+1. **Gate.** Push a rebase only if §8's verdict carries **no findings above Nit** (no Blocker/Major/Minor — a rebase-push re-triggers the contributor's CI, the same double-spend §9.1 prevents). On any such finding, **do not push it** — the contributor is going to push again anyway to fix the blocker, and their rebase will pick the base up for free. Instead, put the rebase instruction in the review body (`git fetch origin next && git rebase origin/next`) and state what it fixes. Rebasing a known-wrong diff spends a fork CI matrix to prove nothing and rewrites someone's branch under them while they are mid-fix.
 2. **Never present a rebase as progress toward merge.** It clears base-drift CI noise. It resolves no finding, retires no Blocker, and moves no PR closer to approval. Any summary that implies otherwise is wrong — see the forbidden sentences in §9.4.
 3. **Prefer asking over pushing.** The default is to tell the contributor to rebase. Push it yourself only when the verdict is clean AND the branch is behind AND `maintainer_can_modify` is true. When you do push, use `--force-with-lease` pinned to the exact sha you fetched, and verify afterwards that the changed-file set and the added/removed line set are unchanged.
 4. **A blocked push gate is a signal, not an obstacle.** If a machine gate refuses the push, stop and re-read your own §8 verdict before doing anything else. Do not request an override token, and never emit one on your own initiative — `CLAUDE.md` reserves it for an explicit human instruction **naming the token**, and general approval ("go ahead", "you have permission") is **not** that. A gate firing on a PR you have already called blocked is usually the system catching a mistake you are in the middle of making.
