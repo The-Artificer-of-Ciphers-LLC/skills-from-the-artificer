@@ -1,0 +1,37 @@
+[
+  {
+    "id": "f54231e8-60bb-4333-9159-2e18bbeecc42",
+    "prompt": "Can you build test?",
+    "expected": "positive",
+    "description": "Tests activation on key phrase: 'build test'",
+    "createdAt": "2026-03-01T01:21:21.859Z"
+  },
+  {
+    "id": "deadf618-0e95-445d-84c6-ef6924ccb5bf",
+    "prompt": "I need to test run",
+    "expected": "positive",
+    "description": "Tests activation on key phrase: 'test run'",
+    "createdAt": "2026-03-01T01:21:21.865Z"
+  },
+  {
+    "id": "c2d03e60-3daf-4540-b245-76b4815cdc80",
+    "prompt": "Help me run debug",
+    "expected": "positive",
+    "description": "Tests activation on key phrase: 'run debug'",
+    "createdAt": "2026-03-01T01:21:21.869Z"
+  },
+  {
+    "id": "256434d7-03b7-4460-86be-d032788981fd",
+    "prompt": "debug log please",
+    "expected": "positive",
+    "description": "Tests activation on key phrase: 'debug log'",
+    "createdAt": "2026-03-01T01:21:21.871Z"
+  },
+  {
+    "id": "f319b06c-8792-41ac-abf0-25b9132338af",
+    "prompt": "I want to log automation",
+    "expected": "positive",
+    "description": "Tests activation on key phrase: 'log automation'",
+    "createdAt": "2026-03-01T01:21:21.874Z"
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {"query": "we've got this design doc for the new notifications service and i'm about to split it into like 5 phases for the team — can you sanity check that the breakdown actually covers everything before i create the tickets?", "should_trigger": true},
+  {"query": "Turn docs/adr/0012-multi-tenant-billing.md into a phased rollout plan. I want each phase to have clear acceptance criteria and I don't want anything slipping between phases.", "should_trigger": true},
+  {"query": "here's our RFC for the realtime collab editor (pasted below). break it into milestones — and make sure the user-facing bits actually get built, last time we shipped the backend and forgot the UI for two sprints. <RFC: presence indicators, operational-transform engine, a cursor overlay, a 'share' button, websocket gateway...>", "should_trigger": true},
+  {"query": "audit this epic for me — it's got 6 sub-issues for the search revamp (new index, query parser, ranking, a search bar UI, analytics, infra). did we miss any deliverable the design called for?", "should_trigger": true},
+  {"query": "I'm planning the migration from REST to GraphQL in stages. Help me sequence it so nothing gets stranded — e.g. a resolver built in one phase but never wired into the gateway.", "should_trigger": true},
+  {"query": "is my phase plan complete? i mapped our auth-hardening ADR (D1 through D8) onto 4 phases but i have a nagging feeling one of the decisions doesn't have a home", "should_trigger": true},
+  {"query": "we decomposed the offline-mode design into phases and split them across two squads. before we lock the plan, what falls through the cracks?", "should_trigger": true},
+  {"query": "the architect wrote a big design for the plugin system and i sliced it into 'foundation / core / polish' phases — check whether that foundation-then-polish split leaves the actual user-facing plugin commands owned by nobody", "should_trigger": true},
+  {"query": "/adr-phase-coverage docs/design/payments-v2.md plus the roadmap in PLANNING.md", "should_trigger": true},
+  {"query": "break this spec into an implementation roadmap and give me a matrix of which requirement each phase delivers, so I can prove to my PM nothing was dropped", "should_trigger": true},
+
+  {"query": "write an ADR documenting why we chose Postgres over DynamoDB for the events table, with context and consequences", "should_trigger": false},
+  {"query": "our tide-prediction model takes the lunar phase as an input — how do I compute the moon phase for a given date in Python?", "should_trigger": false},
+  {"query": "our test coverage on the payments module is at 61%, help me get it to 80% — which files have the worst coverage?", "should_trigger": false},
+  {"query": "review this PR that refactors the auth middleware (link below) — focus on security and correctness, not style", "should_trigger": false},
+  {"query": "our order and inventory services are too tightly coupled and it's causing cascading failures — how should we redraw the service boundaries?", "should_trigger": false},
+  {"query": "estimate how long each of these 5 phases will take in dev-weeks so I can build a timeline for leadership", "should_trigger": false},
+  {"query": "the deploy is stuck in the 'pending' phase — how do I debug why the kubernetes rollout isn't progressing?", "should_trigger": false},
+  {"query": "draft a PRD for the new referral program — goals, target users, success metrics, and open questions", "should_trigger": false},
+  {"query": "we have an ADR that's outdated now that we moved to event sourcing — help me write a superseding ADR that deprecates it", "should_trigger": false},
+  {"query": "generate a dependency graph of our backend modules so I can visualize the current architecture", "should_trigger": false}
+]

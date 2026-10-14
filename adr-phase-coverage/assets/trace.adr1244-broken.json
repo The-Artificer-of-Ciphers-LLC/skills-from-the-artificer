@@ -1,0 +1,23 @@
+{
+  "_comment": "The HISTORICAL ADR-1244 decomposition that shipped the gap. Phase 4 built the lifecycle library and deferred the user-facing command to 'Phase 5'; Phase 5's real scope was registry dispatch (D7), so it never claimed UX-manage. The command belonged to nobody across all 6 phases. Run the checker on this file to see it caught.",
+  "adr": "ADR-1244 (as-shipped, broken)",
+  "decisions": [
+    {"id": "D1", "title": "Versioned capability manifest", "user_facing": false},
+    {"id": "D2", "title": "Runtime registry overlay", "user_facing": false},
+    {"id": "D3", "title": "Source resolver", "user_facing": false},
+    {"id": "D4", "title": "Capability ledger", "user_facing": false},
+    {"id": "D5", "title": "Trust model / consent gate", "user_facing": false},
+    {"id": "D6", "title": "Upgrade + compatibility", "user_facing": false},
+    {"id": "D7", "title": "Registry-driven dispatch", "user_facing": false},
+    {"id": "D9", "title": "Capability matrix", "user_facing": false},
+    {"id": "UX-manage", "title": "User can run `gsd capability install/update/remove/list`", "user_facing": true}
+  ],
+  "phases": [
+    {"id": "1", "name": "Versioned manifest", "owns": ["D1"], "accepts": ["capability.json carries version + engines.gsd"], "defers": []},
+    {"id": "2", "name": "Registry overlay", "owns": ["D2"], "accepts": ["loadRegistry composes installed overlay"], "defers": []},
+    {"id": "3", "name": "Resolver + ledger", "owns": ["D3", "D4"], "accepts": ["resolver stages copy-only; ledger records installs"], "defers": []},
+    {"id": "4", "name": "Trust gate + upgrade", "owns": ["D5", "D6"], "accepts": ["installCapability/upgradeCapability/removeCapability library functions exist + tested"], "defers": [{"to": "5", "what": "UX-manage"}]},
+    {"id": "5", "name": "Registry-driven dispatch", "owns": ["D7"], "accepts": ["graphify/intel/audit dispatched via the registry seam"], "defers": []},
+    {"id": "6", "name": "Matrix + docs", "owns": ["D9"], "accepts": ["capability matrix generated; diataxis docs written"], "defers": []}
+  ]
+}
