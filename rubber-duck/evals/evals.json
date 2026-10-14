@@ -1,0 +1,45 @@
+{
+  "skill_name": "rubber-duck",
+  "evals": [
+    {
+      "id": 0,
+      "name": "autonomous-pr-claim-audit",
+      "prompt": "Use the rubber-duck skill. Autonomous: nobody will reply, answer your own questions from evidence. PR claims to walk against the code are in evals/fixtures/pr-claims/PR.md; the code is retry.js next to it. Walk each claim.",
+      "files": ["evals/fixtures/pr-claims/PR.md", "evals/fixtures/pr-claims/retry.js"],
+      "assertions": [
+        "Output contains a per-claim table or list with a verdict for each of the 4 claims",
+        "Claim 1 ('4 calls total') is REFUTED: the loop makes 3 calls total, with file:line evidence",
+        "Claim 2 ('exponential backoff') is REFUTED: delay is a fixed delayMs",
+        "Claims 3 and 4 are CONFIRMED, not wrongly refuted",
+        "Each verdict cites file:line or a command output, not 'looks like'",
+        "Does not stop to ask the user a question"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "autonomous-design-walk",
+      "prompt": "Use the rubber-duck skill. Autonomous design walk, answer your own questions from evidence. The design is evals/fixtures/design/DESIGN.md and the implementation is price.js next to it. Is the claim 'readers never see a price older than 60s' true?",
+      "files": ["evals/fixtures/design/DESIGN.md", "evals/fixtures/design/price.js"],
+      "assertions": [
+        "Claim 5 (never older than 60s) is REFUTED",
+        "Identifies that PriceCache.get never enforces the TTL (set records 'at' but nothing checks it)",
+        "Identifies that bulk import (importPrices) never invalidates the cache",
+        "Identifies the update ordering race: cache delete happens before the DB write, so a concurrent get can repopulate the old price",
+        "Lists anything it could not verify as UNVERIFIED rather than guessing",
+        "Proposes fixes only after the claim table"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "interactive-stuck-human",
+      "prompt": "ugh i've been stuck on this for like an hour. my React component shows the old user name after I update the profile, the API call succeeds and returns the new name. i dont get why it doesnt update. can you rubber duck this with me?",
+      "files": [],
+      "assertions": [
+        "Asks the user to state expected vs actual in one sentence or asks for the assumptions, rather than proposing a fix",
+        "Does not suggest a specific cause (stale state, memoization, cache) as the answer in the first reply",
+        "Asks exactly one focused question or a short numbered set, not a wall of advice",
+        "Does not claim to have run or read code it has not seen"
+      ]
+    }
+  ]
+}

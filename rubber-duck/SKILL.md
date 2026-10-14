@@ -1,12 +1,14 @@
 ---
 name: rubber-duck
 description: >
-  Rubber duck debugging session. Use when the user is stuck on a bug and can't find the cause,
-  says "I don't understand why this isn't working", "help me think through this", "talk me
-  through this bug", or "rubber duck". Also use when a developer has been debugging for >20
-  minutes without progress — the duck is most valuable before frustration distorts thinking.
-  Triggers on: "stuck", "can't figure out", "doesn't make sense", "walk me through", "help me
-  think", "rubber duck", "explain why".
+  Rubber duck debugging and claim-walking. Use when a user is stuck on a bug ("I don't
+  understand why this isn't working", "talk me through this bug", "rubber duck", "stuck",
+  "doesn't make sense", "help me think") or has been debugging 20+ minutes without progress.
+  Also use, with no human in the loop, to walk the claims in a PR description or design doc
+  against the actual code ("author claims...", "walk the design", "design for #N, answer your own
+  questions from evidence"), or any time an agent is about to assert how code behaves without
+  having checked. Interactive mode questions the person; autonomous mode answers each question
+  from evidence (file:line, command output) and returns a claim / evidence / verdict table.
 ---
 
 # Rubber Duck Debugging
@@ -22,7 +24,21 @@ is where the bug surfaces.
 The AI duck has one advantage over a physical duck: it notices when an explanation is
 internally inconsistent, when an assumption sounds shaky, or when a critical step was skipped.
 
-## Rules for the Duck
+## Pick a Mode First
+
+| Situation | Mode |
+|---|---|
+| A person is present and stuck | **Interactive** (the protocol below) |
+| Args say "autonomous", "walk it", "author claims", "answer your own questions", or there is no one to reply | **Autonomous** (see "Autonomous Mode") |
+
+Why two modes: the interactive duck works because *the human* must reconstruct their mental
+model. An agent has no one to reconstruct for, and an agent asking itself questions and
+answering from memory just repeats its own fluent guess. Research on self-correction found it
+helps only when the check is grounded in something external: code execution, tests, tools
+(Huang et al. 2023, arXiv 2310.01798). So in autonomous mode every question is answered by
+an observation, not an opinion. Sources: `docs/research/rubber-duck-skill-improvements.md`.
+
+## Rules for the Duck (interactive mode)
 
 1. **Never jump to solutions.** The duck's job is to keep the human explaining, not to fix the bug.
 2. **Never accept hand-waving.** "...and then it processes the data..." is not an explanation.
@@ -140,7 +156,58 @@ After the human has identified the root cause:
 
 ---
 
-## What the Duck Does NOT Do
+## Autonomous Mode
+
+Use when no human can answer. The duck's discipline (never accept hand-waving, name every
+assumption, "should" is a red flag) stays; the *answers* come from the code instead.
+
+### A. Decide the input
+
+- **Claim audit**: a PR description, issue, or review comment says the code does X.
+- **Design walk**: a design or ADR says the system will behave a certain way.
+- **Bug**: you are about to explain why something fails.
+
+All three reduce to the same thing: a numbered list of checkable statements.
+
+### B. Extract claims
+
+Write each claim as one line a stranger could check ("4xx errors are never retried", not
+"error handling is robust"). Include implicit claims too: numbers ("up to 3 retries"),
+words like "always/never/only", and anything the text says is "handled by" something else.
+This step is a design choice, not a quoted method: it pairs claim extraction with
+independent verification, which Chain-of-Verification found beats checking everything in one
+pass (arXiv 2309.11495).
+
+### C. Check each claim on its own
+
+For every claim, answer *without rereading your earlier verdicts*, by reading the code or
+running something. Acceptable evidence: `file:line` you read, a command and its output, a
+test that would fail if the claim were false. Not evidence: "the tests pass" (unless they
+exercise the claimed behaviour), "this is a common pattern", your memory of the library.
+
+Look specifically for the places claims usually break: boundaries (off-by-one in counts),
+ordering (delete-then-write races), paths the text never mentions (bulk/import/error
+paths), and "handled elsewhere" (find the elsewhere).
+
+### D. Output
+
+```
+| # | Claim | Evidence (file:line / command) | Verdict |
+|---|-------|--------------------------------|---------|
+| 1 | ...   | retry.js:4 loop runs `retries` times | REFUTED: 3 calls total, not 4 |
+```
+
+Verdicts: **CONFIRMED**, **REFUTED** (say what is true instead, one line), or
+**UNVERIFIED** (say what you could not check and why). End with the list of UNVERIFIED
+items; an honest "I could not check this" is the point, a confident guess is the failure.
+Do not propose fixes until at least one claim is REFUTED, and then only after the table.
+
+Habit from interactive mode that carries over: when your own explanation contains
+"should" or "I think", that is the claim to check next.
+
+---
+
+## What the Duck Does NOT Do (interactive mode)
 
 - ❌ Suggest fixes before the root cause is confirmed
 - ❌ Look up APIs or documentation during the session
