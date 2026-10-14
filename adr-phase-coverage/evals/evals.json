@@ -1,0 +1,23 @@
+{
+  "skill_name": "adr-phase-coverage",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm about to lock the implementation plan for our self-service API key feature. The ADR is at evals/fixtures/adr-0007-apikeys.md and the draft phase roadmap is at evals/fixtures/ROADMAP-apikeys.md. Before I commit to it, check that the phase breakdown actually delivers everything the ADR promises — I don't want anything falling through the cracks between phases.",
+      "expected_output": "Builds a decision->phase traceability matrix and flags that the user-facing 'create/rotate/revoke from the dashboard' capability is owned/wired by no phase: Phase 2 defers the dashboard UI to Phase 3, but Phase 3 only owns rate limiting (D5) and its acceptance criteria never mention the dashboard. Reports orphan-decision + dangling-deferral + keystone-unwired (the dashboard is a user-facing surface with no phase that wires it). Recommends giving an owning phase an explicit 'user can create/rotate/revoke keys from the dashboard' acceptance criterion before locking.",
+      "files": ["evals/fixtures/adr-0007-apikeys.md", "evals/fixtures/ROADMAP-apikeys.md"]
+    },
+    {
+      "id": 2,
+      "prompt": "/adr-phase-coverage — we wrote an RFC for an offline-sync layer (local write queue, conflict resolution, a background sync worker, and a 'Sync now' button + a sync-status indicator in the app). I've sketched 4 phases: (1) local write queue, (2) conflict resolution engine, (3) background sync worker, (4) telemetry + metrics. Turn the RFC into a sound phased plan and make sure the user-facing pieces actually get wired, not just the engine.",
+      "expected_output": "Notices the RFC promises two user-facing surfaces (the 'Sync now' button and the sync-status indicator) that none of the 4 proposed phases own or wire — phases 1-3 are all engine/infra layers and phase 4 is telemetry. Flags this as a keystone-unwired/orphan risk and recommends an explicit phase (or acceptance criteria) that wires the button + indicator to the sync worker, ideally via a thin end-to-end slice early rather than horizontal layers.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Can you audit this migration plan? We're moving auth from session cookies to JWT across 5 phases: (1) issue JWTs alongside cookies, (2) validate JWTs in middleware, (3) migrate the mobile client, (4) migrate the web client, (5) remove cookie code. The original design doc also said admins must be able to force-revoke a user's active tokens. Did we miss anything?",
+      "expected_output": "Catches that the design's 'admins can force-revoke active tokens' requirement is not owned by any of the 5 phases (a JWT revocation list / admin action is neither in the issue/validate phases nor the client migrations nor the cleanup). Reports it as an orphaned decision and notes the admin force-revoke is a user-facing capability needing an owning phase that wires the admin surface + the revocation check in middleware.",
+      "files": []
+    }
+  ]
+}

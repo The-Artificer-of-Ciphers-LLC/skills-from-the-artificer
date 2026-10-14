@@ -16,6 +16,48 @@ A collection of [Claude Code](https://docs.claude.com/en/docs/claude-code/overvi
 | [`ci-preflight/`](ci-preflight/) | Pre-push checklist that prevents CI whiplash — multiple red pushes that could have been caught locally. Guards against three anti-patterns: missing registration surfaces when adding new shipped files, skipping `npm test` before pushing, and guessing at cross-platform fixes instead of diagnosing the root cause. |
 | [`gsd-core-hooks/`](gsd-core-hooks/) | **A full hook suite, lifted from a real project.** Fourteen `PreToolUse`/`PostToolUse` scripts, each closing one named, dated incident: a passing test-runner verdict bound to the exact commit sha before push, no local `node --test`, Memtrace evidence required on a PR approval, and guards against harness poll/timeout false-negatives (backgrounded dispatch, foreground poll-loop kills, self-matching `pgrep` waits). Backs the rules `commands/` states in prose. Not generic — see its `README.md` for what to adapt. |
 
+### Migrated from the Mac mini (Swift/iOS, App Store Connect, ADR coverage)
+
+Some of these originate upstream (e.g. the `swiftui-*` and `asc-*` sets); they're collected here so one install covers every machine.
+
+| Skill | What it does |
+|---|---|
+| [`adr-phase-coverage/`](adr-phase-coverage/) | Use when a user needs to turn a design doc, ADR, RFC, or spec into a phased implementation plan — or verify that an existing phase… |
+| [`apple-on-device-ai/`](apple-on-device-ai/) | Integrate on-device AI using Foundation Models framework, Core ML, and open-source LLM runtimes on Apple Silicon. Covers Foundation Models… |
+| [`asc-app-create-ui/`](asc-app-create-ui/) | Create a new App Store Connect app record via browser automation. Use when there is no public API for app creation and you need an agent to… |
+| [`asc-build-lifecycle/`](asc-build-lifecycle/) | Track build processing, find latest builds, and clean up old builds with asc. Use when managing build retention or waiting on processing. |
+| [`asc-cli-usage/`](asc-cli-usage/) | Guidance for using asc cli in this repo (flags, output formats, pagination, auth, and discovery). Use when asked to run or design asc… |
+| [`asc-crash-triage/`](asc-crash-triage/) | Triage TestFlight crashes, beta feedback, and performance diagnostics using asc. Use when the user asks about TF crashes, TestFlight crash… |
+| [`asc-id-resolver/`](asc-id-resolver/) | Resolve App Store Connect IDs (apps, builds, versions, groups, testers) from human-friendly names using asc. Use when commands require IDs. |
+| [`asc-localize-metadata/`](asc-localize-metadata/) | Automatically translate and sync App Store metadata (description, keywords, what's new, subtitle) to multiple languages using LLM… |
+| [`asc-metadata-sync/`](asc-metadata-sync/) | Sync and validate App Store metadata and localizations with asc, including legacy metadata format migration. Use when updating metadata or… |
+| [`asc-notarization/`](asc-notarization/) | Archive, export, and notarize macOS apps using xcodebuild and asc. Use when you need to prepare a macOS app for distribution outside the… |
+| [`asc-ppp-pricing/`](asc-ppp-pricing/) | Set territory-specific pricing for subscriptions and in-app purchases using current asc setup, pricing summary, price import, and price… |
+| [`asc-release-flow/`](asc-release-flow/) | End-to-end release workflows for TestFlight and App Store using asc publish, builds, versions, and submit commands. Use when asked to… |
+| [`asc-revenuecat-catalog-sync/`](asc-revenuecat-catalog-sync/) | Reconcile App Store Connect subscriptions and in-app purchases with RevenueCat products, entitlements, offerings, and packages using asc… |
+| [`asc-shots-pipeline/`](asc-shots-pipeline/) | Orchestrate iOS screenshot automation with xcodebuild/simctl for build-run, AXe for UI actions, JSON settings and plan files, Go-based… |
+| [`asc-signing-setup/`](asc-signing-setup/) | Set up bundle IDs, capabilities, signing certificates, and provisioning profiles with the asc cli. Use when onboarding a new app or… |
+| [`asc-submission-health/`](asc-submission-health/) | Preflight App Store submissions, submit builds, and monitor review status with asc. Use when shipping or troubleshooting review submissions. |
+| [`asc-subscription-localization/`](asc-subscription-localization/) | Bulk-localize subscription and in-app purchase display names across all App Store locales using asc. Use when you want to fill in… |
+| [`asc-testflight-orchestration/`](asc-testflight-orchestration/) | Orchestrate TestFlight distribution, groups, testers, and What to Test notes using asc. Use when rolling out betas. |
+| [`asc-wall-submit/`](asc-wall-submit/) | Submit or update a Wall of Apps entry in the App-Store-Connect-CLI repository using the existing generate-and-PR flow. Use when the user… |
+| [`asc-workflow/`](asc-workflow/) | Define, validate, and run repo-local multi-step automations with `asc workflow` and `.asc/workflow.json`. Use when migrating from lane… |
+| [`asc-xcode-build/`](asc-xcode-build/) | Build, archive, and export iOS/macOS apps with xcodebuild before uploading to App Store Connect. Use when you need to create an IPA or PKG… |
+| [`developing-ios-apps/`](developing-ios-apps/) | Develops iOS/macOS applications with XcodeGen, SwiftUI, and SPM. Handles Apple Developer signing, notarization, and CI/CD pipelines.… |
+| [`ios-accessibility/`](ios-accessibility/) | Implements, reviews, or improves accessibility in iOS/macOS apps with SwiftUI, UIKit, and AppKit. Use when adding VoiceOver, Voice Control,… |
+| [`ios-debugger-agent/`](ios-debugger-agent/) | Use XcodeBuildMCP to build, run, launch, and debug the current iOS project on a booted simulator. Trigger when asked to run an iOS app,… |
+| [`mobile-ios-design/`](mobile-ios-design/) | Master iOS Human Interface Guidelines and SwiftUI patterns for building native iOS apps. Use when designing iOS interfaces, implementing… |
+| [`swift-concurrency/`](swift-concurrency/) | Diagnose Swift Concurrency issues, refactor callback-based code to async/await, and guide Swift 6 migration when working with tasks,… |
+| [`swift-mcp-server-generator/`](swift-mcp-server-generator/) | Generate a complete Model Context Protocol server project in Swift using the official MCP Swift SDK package. |
+| [`swift-testing-expert/`](swift-testing-expert/) | Expert guidance for Swift Testing: test structure, #expect/#require macros, traits and tags, parameterized tests, test plans, parallel… |
+| [`swiftdata/`](swiftdata/) | Implement, review, or improve data persistence using SwiftData. Use when defining @Model classes with @Attribute, @Relationship,… |
+| [`swiftui-expert-skill/`](swiftui-expert-skill/) | Use when writing, reviewing, or refactoring SwiftUI code for iOS or macOS, including state management, view composition, performance,… |
+| [`swiftui-liquid-glass/`](swiftui-liquid-glass/) | Implement, review, or improve SwiftUI features using the iOS 26+ Liquid Glass API. Use when asked to adopt Liquid Glass in new SwiftUI UI,… |
+| [`swiftui-performance-audit/`](swiftui-performance-audit/) | Audit and improve SwiftUI runtime performance from code review and architecture. Use for requests to diagnose slow rendering, janky… |
+| [`swiftui-pro/`](swiftui-pro/) | Comprehensively reviews SwiftUI code for best practices on modern APIs, maintainability, and performance. Use when reading, writing, or… |
+| [`swiftui-ui-patterns/`](swiftui-ui-patterns/) | Best practices and example-driven guidance for building SwiftUI views and components, including navigation hierarchies, custom view… |
+| [`xcodebuildmcp-cli/`](xcodebuildmcp-cli/) | Official skill for the XcodeBuildMCP CLI. Use when doing iOS/macOS/watchOS/tvOS/visionOS work (build, test, run, debug, log, UI automation). |
+
 ## Not a skill
 
 | Directory | What it is |

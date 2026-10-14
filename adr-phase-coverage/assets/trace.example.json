@@ -1,0 +1,23 @@
+{
+  "_comment": "A PASSING decomposition (the corrected ADR-1244). Copy this shape. The id strings are yours to choose — D1..Dn for ADR decisions, and a readable id like 'UX-manage' for each user-facing capability the ADR PROMISES. Mark user_facing:true for anything the user directly invokes/sees (a command, route, screen). Every decision must be owned by exactly one phase; every defer must land in a phase that owns or accepts it; every user-facing capability must have an owning phase whose accepts names the wired surface.",
+  "adr": "ADR-1244 (corrected)",
+  "decisions": [
+    {"id": "D1", "title": "Versioned capability manifest", "user_facing": false},
+    {"id": "D2", "title": "Runtime registry overlay", "user_facing": false},
+    {"id": "D3", "title": "Source resolver (URL importer)", "user_facing": false},
+    {"id": "D4", "title": "Capability ledger", "user_facing": false},
+    {"id": "D5", "title": "Trust model / consent gate", "user_facing": false},
+    {"id": "D6", "title": "Upgrade + compatibility", "user_facing": false},
+    {"id": "D7", "title": "Registry-driven dispatch", "user_facing": false},
+    {"id": "D9", "title": "Capability matrix", "user_facing": false},
+    {"id": "UX-manage", "title": "User can run `gsd capability install/update/remove/list`", "user_facing": true}
+  ],
+  "phases": [
+    {"id": "1", "name": "Versioned manifest", "owns": ["D1"], "accepts": ["capability.json carries version + engines.gsd; CI stamps native versions"], "defers": []},
+    {"id": "2", "name": "Registry overlay", "owns": ["D2"], "accepts": ["loadRegistry composes installed overlay over first-party"], "defers": []},
+    {"id": "3", "name": "Resolver + ledger", "owns": ["D3", "D4"], "accepts": ["resolveCapabilitySource stages copy-only; ledger records installs"], "defers": []},
+    {"id": "4", "name": "Trust gate + upgrade", "owns": ["D5", "D6"], "accepts": ["installCapability/upgradeCapability/removeCapability library functions exist + tested"], "defers": [{"to": "6", "what": "UX-manage"}]},
+    {"id": "5", "name": "Registry-driven dispatch", "owns": ["D7"], "accepts": ["graphify/intel/audit dispatched via the registry seam"], "defers": []},
+    {"id": "6", "name": "Matrix + management command", "owns": ["D9", "UX-manage"], "accepts": ["capability matrix generated from registry", "user can run the `gsd capability install/update/remove/list` CLI command (wired to the Phase-4 lifecycle)"], "defers": []}
+  ]
+}
