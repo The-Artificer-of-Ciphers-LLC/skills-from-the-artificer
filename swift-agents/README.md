@@ -15,6 +15,16 @@ Agents handle the review workflow. [Marketplace skills](https://github.com/Techo
 
 AI coding tools write Swift like it is 2020. They use ObservableObject when @Observable exists. They ignore actor isolation. They produce views with no accessibility modifiers. They have never heard of Apple Foundation Models or @Generable.
 
+
+## Artificer fork notes
+
+This is the Artificer of Ciphers fork of Techopolis/swift-agents, maintained inside `skills-from-the-artificer/swift-agents/` and mirrored to [The-Artificer-of-Ciphers-LLC/swift-agents](https://github.com/The-Artificer-of-Ciphers-LLC/swift-agents).
+
+- **Claude Code and opencode need different files.** Claude's `tools:` is a list and `name:` is explicit; opencode takes a `permission` map, names the agent from the filename, and passes unknown frontmatter keys through to the provider. `agents/` is canonical; `scripts/build-opencode.sh` generates `opencode/agents/` (identical body, translated frontmatter). Edit `agents/`, then rebuild.
+- **`link.sh`** symlinks both sets into `~/.claude/agents` and `~/.config/opencode/agents` instead of copying them.
+- `install.sh` / `update.sh` / `uninstall.sh` now point at this fork. `update.sh` read agents from a `.claude/agents/` path that doesn't exist and would have deleted every installed agent; it now reads `agents/`.
+- The `UserPromptSubmit`/`SubagentStop` hooks in `hooks/hooks.json` are Claude-only; there is no opencode equivalent here yet.
+
 ## Before and After
 
 **Without Swift Agents:**
@@ -99,7 +109,7 @@ Agents are slim workflow reviewers (~50-80 lines each). They flag issues and enf
 ### One-Liner (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Techopolis/swift-agents/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/swift-agents/main/install.sh | bash
 ```
 
 The installer asks which tool(s) and where (project or global). It also offers to install companion skills from the marketplace.
@@ -108,22 +118,22 @@ The installer asks which tool(s) and where (project or global). It also offers t
 
 ```bash
 # Claude Code — project
-curl -fsSL https://raw.githubusercontent.com/Techopolis/swift-agents/main/install.sh | bash -s -- --project
+curl -fsSL https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/swift-agents/main/install.sh | bash -s -- --project
 
 # Claude Code — global
-curl -fsSL https://raw.githubusercontent.com/Techopolis/swift-agents/main/install.sh | bash -s -- --global
+curl -fsSL https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/swift-agents/main/install.sh | bash -s -- --global
 
 # VS Code Copilot — project
-curl -fsSL https://raw.githubusercontent.com/Techopolis/swift-agents/main/install.sh | bash -s -- --vscode
+curl -fsSL https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/swift-agents/main/install.sh | bash -s -- --vscode
 
 # VS Code Copilot — global
-curl -fsSL https://raw.githubusercontent.com/Techopolis/swift-agents/main/install.sh | bash -s -- --vscode-global
+curl -fsSL https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/swift-agents/main/install.sh | bash -s -- --vscode-global
 
 # Both — project
-curl -fsSL https://raw.githubusercontent.com/Techopolis/swift-agents/main/install.sh | bash -s -- --both
+curl -fsSL https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/swift-agents/main/install.sh | bash -s -- --both
 
 # Both — global
-curl -fsSL https://raw.githubusercontent.com/Techopolis/swift-agents/main/install.sh | bash -s -- --both-global
+curl -fsSL https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/swift-agents/main/install.sh | bash -s -- --both-global
 ```
 
 ### Manual Install
@@ -131,14 +141,14 @@ curl -fsSL https://raw.githubusercontent.com/Techopolis/swift-agents/main/instal
 **Project-level** (recommended, travels with the repo):
 
 ```bash
-git clone https://github.com/Techopolis/swift-agents.git
+git clone https://github.com/The-Artificer-of-Ciphers-LLC/swift-agents.git
 cp -r swift-agents/.claude /path/to/your/swift-project/
 ```
 
 **Global** (available in all projects):
 
 ```bash
-git clone https://github.com/Techopolis/swift-agents.git
+git clone https://github.com/The-Artificer-of-Ciphers-LLC/swift-agents.git
 cp -r swift-agents/.claude/agents/*.md ~/.claude/agents/
 mkdir -p ~/.claude/hooks
 cp swift-agents/.claude/hooks/hooks.json ~/.claude/hooks/
@@ -237,7 +247,7 @@ Areas where help is especially welcome:
 - watchOS specialist knowledge
 - Corrections to anything the agents get wrong
 
-Found an agent gap? Use the [Agent Gap](https://github.com/Techopolis/swift-agents/issues/new?template=agent_gap.yml) issue template.
+Found an agent gap? Use the [Agent Gap](https://github.com/The-Artificer-of-Ciphers-LLC/swift-agents/issues/new?template=agent_gap.yml) issue template.
 
 ## License
 

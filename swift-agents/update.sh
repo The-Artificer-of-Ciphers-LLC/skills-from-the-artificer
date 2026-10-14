@@ -12,7 +12,7 @@
 
 set -e
 
-REPO_URL="https://github.com/Techopolis/swift-agents.git"
+REPO_URL="https://github.com/The-Artificer-of-Ciphers-LLC/swift-agents.git"
 CACHE_DIR="$HOME/.claude/.swift-agents-repo"
 VERSION_FILE="$HOME/.claude/.swift-agents-version"
 LOG_FILE="$HOME/.claude/.swift-agents-update.log"
@@ -79,7 +79,7 @@ fi
 
 # Auto-detect and copy updated agents
 UPDATED=0
-for SRC in "$CACHE_DIR"/.claude/agents/*.md; do
+for SRC in "$CACHE_DIR"/agents/*.md; do
   [ -f "$SRC" ] || continue
   agent="$(basename "$SRC")"
   DST="$INSTALL_DIR/agents/$agent"
@@ -95,7 +95,7 @@ done
 for DST in "$INSTALL_DIR"/agents/*.md; do
   [ -f "$DST" ] || continue
   agent="$(basename "$DST")"
-  SRC="$CACHE_DIR/.claude/agents/$agent"
+  SRC="$CACHE_DIR/agents/$agent"
   if [ ! -f "$SRC" ]; then
     rm "$DST"
     name="${agent%.md}"
@@ -105,7 +105,7 @@ for DST in "$INSTALL_DIR"/agents/*.md; do
 done
 
 # Copy updated hook
-HOOK_SRC="$CACHE_DIR/.claude/hooks/swift-team-eval.sh"
+HOOK_SRC="$CACHE_DIR/hooks/swift-team-eval.sh"
 HOOK_DST="$INSTALL_DIR/hooks/swift-team-eval.sh"
 if [ -f "$HOOK_SRC" ] && [ -f "$HOOK_DST" ]; then
   if ! cmp -s "$HOOK_SRC" "$HOOK_DST" 2>/dev/null; then

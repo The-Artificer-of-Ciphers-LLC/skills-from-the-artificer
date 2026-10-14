@@ -19,7 +19,7 @@ If you discover a security issue, please report it responsibly.
 
 **Do not open a public issue.**
 
-Instead, email the maintainer directly or use [GitHub's private vulnerability reporting](https://github.com/Techopolis/swift-agents/security/advisories/new).
+Instead, email the maintainer directly or use [GitHub's private vulnerability reporting](https://github.com/The-Artificer-of-Ciphers-LLC/swift-agents/security/advisories/new).
 
 We will acknowledge receipt within 48 hours and provide a fix or mitigation as quickly as possible.
 
