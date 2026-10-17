@@ -73,6 +73,28 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
+  // UNSHIPPED-PRODUCT EXEMPTION. The guard exists to stop timeout bumps that paper over a real
+  // performance/reliability problem in a SHIPPED product. A product still being scaffolded has no
+  // such users, so edits under a path listed in ~/.claude/timeout-guard-unshipped.txt (one absolute
+  // repo path per line, '#' comments allowed; linked worktrees live under the repo path so they are
+  // covered) are exempt. The list is user-level on purpose: a repo-committed marker could be added by
+  // an agent to switch the guard off. Remove a line when its product ships. Fail closed: any read
+  // error means "not exempt".
+  try {
+    const target = payload && payload.tool_input && payload.tool_input.file_path;
+    if (typeof target === 'string' && path.isAbsolute(target)) {
+      const listFile = path.join(os.homedir(), '.claude', 'timeout-guard-unshipped.txt');
+      const roots = fs.readFileSync(listFile, 'utf8')
+        .split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+      const resolved = path.resolve(target);
+      if (roots.some((r) => path.isAbsolute(r) && (resolved === path.resolve(r) || resolved.startsWith(path.resolve(r) + path.sep)))) {
+        process.exit(0);
+      }
+    }
+  } catch {
+    // no list or unreadable: guard applies as before
+  }
+
   const TIMEOUT_IDENT_RE = /\b([A-Za-z_][A-Za-z0-9_]*(?:TIMEOUT|Timeout|timeout|TIME_OUT|time_out)[A-Za-z0-9_]*)\b\s*(?::|=|,|\()\s*['"`]?(\d[\d_]*)/g;
 
   function findTimeoutAssignments(text) {

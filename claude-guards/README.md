@@ -250,3 +250,23 @@ Registered async so it cannot stall a merge. Note that the `if: "Bash(git merge*
 filter has been observed firing on non-merge Bash calls; the script is idempotent and
 cheap, so this is wasteful rather than harmful, but do not rely on the filter for
 correctness.
+
+## block-timeout-increase-guard.cjs — the unshipped-product exemption
+
+The guard blocks edits that raise a timeout-shaped value, because bumping a timeout in a
+SHIPPED product usually papers over a real performance or reliability problem. A product that
+has not shipped has no such users, so edits under a path listed in
+`~/.claude/timeout-guard-unshipped.txt` are exempt:
+
+    # one absolute repo path per line; '#' comments allowed
+    /Users/you/projects/some-unshipped-product
+
+- Linked worktrees live under the repo path, so they are covered.
+- The list is **user-level on purpose**. A repo-committed marker could be added by an agent to
+  switch the guard off, which defeats the point.
+- It **fails closed**: a missing, unreadable, empty or comment-only list, a relative
+  `file_path`, a prefix lookalike (`app-evil` vs `app`) and a `..` traversal out of the root
+  all leave the guard applying as before.
+- Remove a line when its product ships.
+
+Tests: `bash claude-guards/hooks/block-timeout-increase-guard.test.sh` (isolated `HOME`).
