@@ -212,6 +212,7 @@ main() {
         tip="$(git -C "$toplevel" rev-parse "refs/heads/$wt_branch" 2>/dev/null)"
         if [ "$dryrun" -eq 1 ]; then
             echo "DRYRUN: would remove worktree '$wt_path' (branch '$wt_branch', landed via $via)"
+            maybe_delete_remote "$wt_branch" "$tip"
             return 0
         fi
         if git -C "$toplevel" worktree remove "$wt_path" 2>>"$REAP_LOG"; then

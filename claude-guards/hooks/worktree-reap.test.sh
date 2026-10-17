@@ -174,6 +174,15 @@ OUT="$(run_hook WORKTREE_REAP_DRYRUN=1)"
 check "dry run deletes nothing" has_branch feat/m
 check "dry run reports the branch" grep -q "would delete local branch 'feat/m'" <<<"$OUT"
 
+echo "== dry run reports remote deletion for worktree-backed branches"
+new_repo; squash_merged_branch feat/dw; fake_merged feat/dw "$TIP" main "$MERGE"
+WT="$REPO/.claude/worktrees/dw"; git -C "$REPO" worktree add -q "$WT" feat/dw
+OUT="$(run_hook WORKTREE_REAP_DRYRUN=1 WORKTREE_REAP_REMOTE=1)"
+check "dry run lists the worktree" grep -q "would remove worktree" <<<"$OUT"
+check "dry run lists the remote branch too" grep -q "would delete remote branch 'origin/feat/dw'" <<<"$OUT"
+check "dry run still removed nothing" has_worktree "$WT"
+check "dry run left the remote branch" has_remote feat/dw
+
 echo "== remote deletion (opt-in)"
 new_repo; squash_merged_branch feat/n; fake_merged feat/n "$TIP" main "$MERGE"
 run_hook WORKTREE_REAP_REMOTE=1 >/dev/null
