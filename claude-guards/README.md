@@ -183,22 +183,68 @@ tool that indexes per-directory (Memtrace, for one) will happily index each as a
 separate repository. One real case reached 22 stale worktree-scoped repo IDs holding
 75% of the nodes in a 34 GB index.
 
-It removes a worktree only when ALL THREE hold:
+### What "landed" means
 
-1. its branch is fully merged into the default branch, AND
-2. its working tree is clean, AND
-3. it is not locked
+A branch is cleaned up only once its work has landed in the default branch, by either route:
 
-and only for worktrees under `<repo>/.claude/worktrees/`, so hand-made worktrees
-elsewhere are out of range. It uses `git worktree remove` and `git branch -d` — never
-the `--force`/`-D` variants — so git itself refuses to discard unmerged work even if
-the predicate were wrong. It always exits 0: a hook that blocks your `git merge` is
-worse than the stale worktree it was cleaning up.
+| Route | Test | Why it exists |
+|---|---|---|
+| `ancestor` | the branch tip is an ancestor of `main` | plain merges and fast-forwards |
+| `squash` | GitHub reports a MERGED PR for the branch whose **head SHA equals the local tip** (pushed, nothing added since), whose **base is the default branch**, and whose **merge commit is already in local `main`** | squash merges, where `is-ancestor` is always false because the commits are rewritten |
 
-`WORKTREE_REAP_DRYRUN=1` prints what it would remove and touches nothing. Run that
-first in any repo — verify the selection against `git worktree list` before letting it
-act. Reaped worktrees are appended to `~/.claude/hooks/worktree-reap.log` (last 500
-lines kept).
+The original hook had only the `ancestor` test, so in a squash-merging repo it could never
+reap anything and every agent worktree and feature branch piled up. Stacked PRs are handled
+conservatively: a PR merged into another feature branch (not `main`) does not count, so
+intermediate stack branches are left until the final PR lands.
+
+### What it removes
+
+- **Worktrees** under `<repo>/.claude/worktrees/` when the branch has landed AND the tree is
+  clean AND it is not locked AND it is not in use (a live process cwd inside it, or
+  HEAD/index/logs touched within `WORKTREE_REAP_MIN_AGE_SECONDS`, default 86400). Never the
+  main checkout, a detached-HEAD worktree, or the default branch. It also works when the
+  triggering command ran inside a linked worktree, where it acts on the main checkout's view.
+- **Local branches** that have landed, are not the default branch, and are not checked out in
+  any worktree. An `ancestor` branch must also be older than the minimum age so a brand-new
+  empty branch is not mistaken for finished work.
+- **Remote branches**: opt-in only (`WORKTREE_REAP_REMOTE=1`). Deleted only if the remote tip
+  equals the local tip and no OPEN PR is based on the branch (deleting a stacked PR's base
+  would close its child PR).
+
+### The `-D` tradeoff
+
+This used to say "never `-D`, so git itself refuses to discard unmerged work even if the
+predicate were wrong." That safety net cannot exist for squash merges: git cannot see that a
+squashed branch's work is in `main`, so `git branch -d` always refuses. The `squash` route
+therefore uses `-D`, and relies on the four-part PR check above instead of git's own. The
+`ancestor` route still uses `-d`, and worktrees are still removed without `--force`, so git
+still refuses to drop uncommitted changes. Branch tips are recorded in
+`~/.claude/hooks/worktree-reap.log` so a deleted branch can be restored with
+`git branch <name> <sha>`.
+
+### GitHub calls
+
+`gh` is consulted at SessionStart, after commands that usually follow a merge (`gh pr merge`,
+`git pull`/`fetch`/`switch`/`checkout`), or at most once per `WORKTREE_REAP_GH_INTERVAL`
+seconds (default 1800); this hook is registered on every Bash call, so it must not hit the
+network each time. Without `gh`, or with `WORKTREE_REAP_NO_GH=1`, only the `ancestor` route runs.
+A failing `gh` call keeps everything.
+
+It always exits 0: a hook that blocks your `git merge` is worse than the stale worktree it
+was cleaning up.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `WORKTREE_REAP_DRYRUN` | `0` | `1` prints what it would remove and touches nothing |
+| `WORKTREE_REAP_REMOTE` | `0` | `1` also deletes the remote branch (see conditions above) |
+| `WORKTREE_REAP_MIN_AGE_SECONDS` | `86400` | in-use / freshness window |
+| `WORKTREE_REAP_GH_INTERVAL` | `1800` | minimum seconds between non-triggered GitHub sweeps |
+| `WORKTREE_REAP_NO_GH` | `0` | `1` disables the squash route |
+| `WORKTREE_REAP_LOG` | `~/.claude/hooks/worktree-reap.log` | action log (last 500 lines kept) |
+
+Run it with `WORKTREE_REAP_DRYRUN=1` first in any repo and check the selection against
+`git worktree list` before letting it act. Tests: `bash claude-guards/hooks/worktree-reap.test.sh`
+(temporary git repos, a bare origin, and a fake `gh`).
 
 Registered async so it cannot stall a merge. Note that the `if: "Bash(git merge*)"`
 filter has been observed firing on non-merge Bash calls; the script is idempotent and
