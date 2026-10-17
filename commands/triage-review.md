@@ -101,6 +101,13 @@ write.
 <memtrace_first>
 **Tool split (CodeGraph first, Memtrace for heavy hits).** Use CodeGraph (`codegraph_explore` / `codegraph` CLI) for symbol lookup, file reads, callers/callees, and ordinary blast radius. Reserve Memtrace (and cortex) for git history/evolution, `recall_decision`, cross-repo/API topology, risky blast radius (`get_impact`), PR review evidence, and dead code/complexity, because Memtrace costs quota. If `~/.claude/state/memtrace-quota.json` says `blocked` with a future `until`, never call Memtrace; use CodeGraph until that time.
 
+**Environment fallback.** If the Memtrace MCP tools are not available at all (calls fail with `Unknown tool`), the run enters **Fallback Mode** instead of stalling:
+
+1. **No pinning.** Skip `repo_id` pinning; rely on the current worktree's context and CodeGraph. Leave `memtrace_repo_id` null in `00-run.json` and put the reason in `memtrace_binding_note`.
+2. **Evidence.** CodeGraph (`codegraph_explore`) is the primary evidence source.
+3. **Artifacts.** In the diagnosis artifact's "Memtrace calls made" section, write `[MEMTRACE UNAVAILABLE - FALLBACK TO CODEGRAPH]` followed by the CodeGraph queries used.
+4. **Same bar.** Fallback Mode lowers no standard: never apply `confirmed-bug` on a bare grep; require structural evidence from CodeGraph. This is a different case from an `unavailable` result on a single Cortex tool (see below), which still means that check did not run.
+
 **For the heavy-hit lookups above, Memtrace is the first stop — before Read/Grep/Glob/find.** A
 Memtrace call returns exact `file:start_line:end_line` in one round-trip and gives you the
 graph (callers, blast radius, history) that grep cannot. Fall back to Read/Grep only for
