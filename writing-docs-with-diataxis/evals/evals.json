@@ -1,0 +1,49 @@
+{
+  "skill_name": "writing-docs-with-diataxis",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Our README.md for this skills repo is one giant file: a philosophy section, install commands, a table of every skill, a how-to-write-a-skill section, and a troubleshooting list. Make it better for publishing.",
+      "expected_output": "Classifies each README section by Diátaxis quadrant, identifies mixed content, splits or links out into how-to/reference/explanation pages with real content (no empty placeholders), keeps README as a front door, and reports remaining items.",
+      "files": [],
+      "assertions": [
+        "Classifies the existing README sections by Diátaxis type (names tutorial, how-to guide, reference, explanation)",
+        "Identifies at least one README section that mixes two or more types",
+        "Writes at least one new docs file with real content moved from the README (not a stub)",
+        "Creates no empty or placeholder pages (no TODO, coming soon, or heading-only files)",
+        "Each new page is a single type, and any how-to page is titled 'How to ...'",
+        "README keeps the catalog and links to the split-out pages instead of duplicating their content",
+        "Report states what remains undone, ranked or ordered",
+        "Does not modify any file inside the real repo (outputs only in the outputs dir)"
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "Write a getting-started page for installing and trying the rubber-duck skill.",
+      "expected_output": "Recognises this as a tutorial (or install how-to plus tutorial), keeps explanation minimal with links, gives a single working path with visible results, and does not enumerate options or reference material.",
+      "files": [],
+      "assertions": [
+        "Page states the destination as 'we will ...' and does not use 'you will learn'",
+        "Gives expected output or a 'you will notice' narrative for the key steps",
+        "Follows a single path with no alternative install methods inline (alternatives linked, not listed)",
+        "Explanation is limited to a clause or sentence plus a link, not a section",
+        "Install command matches a command actually present in the repo README",
+        "Does not contain a flag/option reference table",
+        "notes.md names other pages needed and labels each with a Diátaxis type"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Is this doc page good? 'How to use asc-release-flow: asc-release-flow is based on a philosophy of small releases. Flags: --build, --version, --group. First, understand that TestFlight groups are...' ",
+      "expected_output": "Diagnoses a mix of explanation, reference and how-to, with a tool-named rather than goal-named title, and proposes one concrete next split rather than a full redesign.",
+      "files": [],
+      "assertions": [
+        "Identifies the page mixes at least three types (explanation, reference, and instruction)",
+        "Notes that the title 'How to use <tool>' is named for the tool, not a user goal",
+        "Proposes one concrete next action (not only a full redesign)",
+        "Does not recommend creating empty placeholder pages",
+        "Uses the four Diátaxis type names correctly"
+      ]
+    }
+  ]
+}
