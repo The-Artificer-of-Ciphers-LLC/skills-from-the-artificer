@@ -28,6 +28,7 @@ const { execFileSync } = require('child_process');
 const ALLOWED_EXTS = new Set(['.md', '.json', '.yml', '.yaml', '.toml', '.txt']);
 const EXEMPT_DIR_SEGMENTS = ['.gsd', '.claude', '.git'];
 const MAIN_CHECKOUT_MARKER = path.join('.gsd', 'main-checkout-ok');
+const LOCAL_MARKER = 'gsd-main-checkout-ok';
 
 function normalizeSlashes(p) {
   return String(p || '').replace(/\\/g, '/');
@@ -109,8 +110,14 @@ function readStdin(timeoutMs) {
 // A repo can opt out of the worktree requirement by committing a
 // `.gsd/main-checkout-ok` marker at its root. `commonDirAbs` is the repo's
 // `.git` directory, so the root is its parent.
+//
+// A second, local-only opt-out lives inside the git directory itself:
+// `<repo>/.git/gsd-main-checkout-ok`. It is never tracked, never shows in
+// `git status`, and never leaks to other clones or sibling repos — use it when
+// working on main is a per-machine choice rather than a repo convention.
 function hasMainCheckoutOptOut(commonDirAbs) {
   try {
+    if (fs.existsSync(path.join(commonDirAbs, LOCAL_MARKER))) return true;
     return fs.existsSync(path.join(path.dirname(commonDirAbs), MAIN_CHECKOUT_MARKER));
   } catch {
     return false;
@@ -132,7 +139,8 @@ function denyOutput(targetPath) {
     'inside it). Why: /security-review substitutes `git diff` in the SESSION cwd; the push gate ' +
     'resolves HEAD from the session worktree; Memtrace binds its overlay to the session cwd. ' +
     'Bypass: set GSD_WORKTREE_GUARD_OFF=1 for this call if this is a deliberate main-checkout edit.' +
-    ' Per-repo opt-out: commit an empty `.gsd/main-checkout-ok` marker at the repo root if this repo develops on main by design.';
+    ' Per-repo opt-out: commit an empty `.gsd/main-checkout-ok` marker at the repo root if this repo develops on main by design,' +
+    ' or, to keep it local and untracked, run `touch "$(git rev-parse --git-common-dir)/gsd-main-checkout-ok"` (the env var cannot be set inline per call).';
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
@@ -174,7 +182,7 @@ async function main() {
   const fallbackCwd = typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd();
   const targetDir = path.isAbsolute(targetPath) ? path.dirname(targetPath) : fallbackCwd;
 
-  const dirs = resolveGitDirs(targetDir, fallbackCwd);
+  const dirs = resolveGitDirs(targetDir, path.isAbsolute(targetPath) ? null : fallbackCwd);
   if (!dirs) return allowOutput(); // git error / not a repo — nothing to enforce
 
   if (dirs.gitDirAbs === dirs.commonDirAbs) {
