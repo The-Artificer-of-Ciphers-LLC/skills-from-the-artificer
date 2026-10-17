@@ -47,6 +47,18 @@
  *     value for the same ident.
  *   - Any failure reading/parsing the transcript is treated as "not
  *     confirmed" (fail closed — the deny stands).
+ *
+ * SHORT REPLY: the human may also answer a block with just `approve` or `deny`
+ * (any case, optional trailing . or !, nothing else in the message). It binds ONLY
+ * if it is the human's very next message after the guard's block, and only to the
+ * hits named in the machine-readable `[timeout-guard hits: ...]` line of the block
+ * message(s) since their previous message. A block is recognised in the transcript
+ * only as a non-human `tool_result` with is_error:true whose content starts with the
+ * hook-error prefix, so tool output that merely prints that text cannot pose as one.
+ * Decisions are applied in transcript order and the last one wins: a later `deny`
+ * overrides an earlier approval, a later `approve` (answering a fresh block) reverses
+ * a denial. A denied hit is re-blocked with a "do not retry" message. Blocks raised
+ * inside a subagent live in its own transcript, so there the typed phrase is the way.
  * On a fully-confirmed edit, one line is appended (best-effort) to
  * ~/.claude/timeout-guard-approvals.log per confirmed hit, then the hook
  * allows (exit 0, no output).
@@ -176,24 +188,65 @@ process.stdin.on('end', () => {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  // Returns a Set of "ident::normalizedValue" keys the human confirmed.
-  function collectHumanConfirmations(transcriptPath) {
-    const confirmed = new Set();
-    if (!transcriptPath) return confirmed;
+  // The guard's own block message, as the transcript records it: a tool_result with
+  // is_error:true whose content STARTS with the hook-error prefix. Output that merely
+  // prints this text (a Bash echo, a file read) has a different start and is_error:false,
+  // so it cannot pose as a block.
+  const BLOCK_PREFIX_RE = /^PreToolUse:(?:Write|Edit|MultiEdit) hook error: Blocked: this edit raises/;
+  const BLOCK_MARKER_RE = /\[timeout-guard hits: ([^\]]*)\]/;
+  const HIT_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*::\d+$/;
+  // A bare "approve" or "deny" (any case, optional trailing . or !) and nothing else.
+  const SHORT_REPLY_RE = /^\s*(approve|deny)\s*[.!]?\s*$/i;
+
+  // Hit keys ("ident::value") named by a guard block recorded in this entry, or [].
+  function blockedHitKeys(entry) {
+    if (entry.type !== 'user' || entry.isSidechain === true) return [];
+    if (entry.origin && entry.origin.kind === 'human') return [];
+    const message = entry.message || entry;
+    const content = message.content !== undefined ? message.content : entry.content;
+    if (!Array.isArray(content)) return [];
+    const keys = [];
+    for (const block of content) {
+      if (!block || block.type !== 'tool_result' || block.is_error !== true) continue;
+      let text = block.content;
+      if (Array.isArray(text)) text = text.map((b) => (b && typeof b.text === 'string' ? b.text : '')).join('\n');
+      if (typeof text !== 'string' || !BLOCK_PREFIX_RE.test(text)) continue;
+      const marker = BLOCK_MARKER_RE.exec(text);
+      if (!marker) continue;
+      for (const k of marker[1].split(',').map((s) => s.trim())) {
+        if (HIT_KEY_RE.test(k)) keys.push(k);
+      }
+    }
+    return keys;
+  }
+
+  // Walks the main transcript once, in order, and returns a Map of
+  // "ident::normalizedValue" -> { verb: 'approve' | 'deny', via: 'typed' | 'reply' }.
+  // The LAST decision for a key wins, so a later "deny" overrides an earlier approval and a
+  // later "approve" can reverse a denial. Two ways the human decides:
+  //   typed  - the full phrase `confirm IDENT = VALUE`, valid anywhere in the session.
+  //   reply  - a bare `approve` / `deny`, valid ONLY as the human's very next message after a
+  //            guard block, and only for the hits named in the block(s) since their last
+  //            message. Any other human message in between consumes the binding, so an
+  //            unrelated "approve" (a plan, a PR) can never approve a timeout bump.
+  function collectHumanDecisions(transcriptPath) {
+    const decisions = new Map();
+    if (!transcriptPath) return decisions;
     let mainPath;
     try {
       mainPath = resolveMainTranscriptPath(transcriptPath);
     } catch {
-      return confirmed;
+      return decisions;
     }
 
     let raw;
     try {
       raw = fs.readFileSync(mainPath, 'utf8');
     } catch {
-      return confirmed;
+      return decisions;
     }
 
+    const pending = new Set(); // hit keys blocked since the human's last message
     const lines = raw.split('\n');
     for (const line of lines) {
       const trimmed = line.trim();
@@ -206,7 +259,11 @@ process.stdin.on('end', () => {
       }
       if (!entry || entry.type !== 'user') continue;
       if (entry.isSidechain === true) continue;
-      if (!entry.origin || entry.origin.kind !== 'human') continue;
+
+      if (!entry.origin || entry.origin.kind !== 'human') {
+        for (const k of blockedHitKeys(entry)) pending.add(k);
+        continue;
+      }
 
       const message = entry.message || entry;
       const texts = extractTextBlocks(message.content !== undefined ? message.content : entry.content);
@@ -216,15 +273,26 @@ process.stdin.on('end', () => {
         while ((cm = CONFIRM_RE.exec(text)) !== null) {
           const confIdent = cm[1];
           const confValue = Number(cm[2].replace(/_/g, ''));
-          confirmed.add(`${confIdent}::${confValue}`);
+          decisions.set(`${confIdent}::${confValue}`, { verb: 'approve', via: 'typed' });
         }
       }
+      if (pending.size > 0 && texts.length === 1) {
+        const reply = SHORT_REPLY_RE.exec(texts[0]);
+        if (reply) {
+          const verb = reply[1].toLowerCase();
+          for (const k of pending) decisions.set(k, { verb, via: 'reply' });
+        }
+      }
+      pending.clear(); // the human's next message, whatever it said, ends the binding
     }
-    return confirmed;
+    return decisions;
   }
 
-  const confirmedSet = collectHumanConfirmations(payload.transcript_path);
-  const unconfirmed = hits.filter((h) => !confirmedSet.has(`${h.ident}::${h.to}`));
+  const decisions = collectHumanDecisions(payload.transcript_path);
+  const keyOf = (h) => `${h.ident}::${h.to}`;
+  const decisionFor = (h) => decisions.get(keyOf(h));
+  const unconfirmed = hits.filter((h) => !(decisionFor(h) && decisionFor(h).verb === 'approve'));
+  const denied = unconfirmed.filter((h) => decisionFor(h) && decisionFor(h).verb === 'deny');
 
   if (unconfirmed.length === 0) {
     // Every hit was explicitly confirmed by the human — log and allow.
@@ -237,6 +305,7 @@ process.stdin.on('end', () => {
         ident: h.ident,
         from: h.from,
         to: h.to,
+        via: decisionFor(h) ? decisionFor(h).via : null,
       })).join('\n') + '\n';
       fs.appendFileSync(logPath, lines);
     } catch {
@@ -252,12 +321,19 @@ process.stdin.on('end', () => {
     .map((h) => `confirm ${h.ident} = ${h.to}`)
     .join(' | ');
 
-  const reason =
-    `Blocked: this edit raises (or, for a new file / new assignment, sets) timeout-shaped value(s): ${hitList}. ` +
-    `Raising a timeout budget is kicking the can down the road on a real performance/reliability problem, not a ` +
-    `fix. This must never be the agent's own unilateral choice. To proceed, the HUMAN (not this agent, and not a ` +
-    `relayed or quoted confirmation) must type the exact phrase ${confirmPhrases} in this conversation, then you ` +
-    `may retry.`;
+  // Machine-readable: lets a bare `approve` / `deny` from the human be bound to exactly these
+  // hits (see collectHumanDecisions). Present on every block, including a repeat after a deny.
+  const marker = `[timeout-guard hits: ${unconfirmed.map(keyOf).join(', ')}]`;
+
+  const reason = denied.length > 0
+    ? `Blocked: this edit raises (or, for a new file / new assignment, sets) timeout-shaped value(s): ${hitList}. ` +
+      `The human DENIED this change (${denied.map(keyOf).join(', ')}). Do not retry it, rephrase it, split it ` +
+      `across edits, or route around this guard. Ask the human what they want done instead. ${marker}`
+    : `Blocked: this edit raises (or, for a new file / new assignment, sets) timeout-shaped value(s): ${hitList}. ` +
+      `Raising a timeout budget is kicking the can down the road on a real performance/reliability problem, not a ` +
+      `fix. This must never be the agent's own unilateral choice. To proceed, the HUMAN (not this agent, and not a ` +
+      `relayed or quoted confirmation) must reply with exactly \`approve\` as their very next message (or \`deny\` ` +
+      `to refuse), or type the exact phrase ${confirmPhrases} at any time. Then you may retry. ${marker}`;
 
   process.stdout.write(JSON.stringify({
     decision: 'block',
