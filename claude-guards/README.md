@@ -251,6 +251,34 @@ filter has been observed firing on non-merge Bash calls; the script is idempoten
 cheap, so this is wasteful rather than harmful, but do not rely on the filter for
 correctness.
 
+## block-timeout-increase-guard.cjs — approving a block
+
+When the guard blocks a timeout bump, the human answers with one word:
+
+| You say | Result |
+|---|---|
+| `approve` | the blocked change is allowed on retry |
+| `deny` | the change is refused; a retry is re-blocked with a "do not retry" message |
+| `confirm IDENT = VALUE` | the original typed phrase; still works, at any time |
+
+The short reply is deliberately narrow, because a bare "approve" is easy to mean for something else:
+
+- It binds only if it is **your very next message** after the block. If you say anything else first,
+  the binding is gone and the typed phrase (or a fresh block + `approve`) is needed.
+- It covers only the value(s) named in that block. If several blocks happened since your last
+  message, one `approve` covers all of them, since you saw them all.
+- It must be the whole message: `approve`, `Approve!`, `APPROVE.` count; `approve it` does not.
+- Decisions are applied in order and the last wins: a later `deny` overrides an earlier approval, and
+  an `approve` that answers a fresh block reverses a denial.
+- Everything is read from the session transcript, never from a file an agent could write. A block is
+  recognised only as a non-human `tool_result` with `is_error: true` that starts with the hook-error
+  prefix, so output that merely prints the guard's text cannot pose as one. Replies from a subagent
+  or sidechain never count.
+- Blocks raised **inside a subagent** are in that subagent's own transcript, so there the typed
+  phrase is the way.
+
+`~/.claude/timeout-guard-approvals.log` records each approved change with `via: "reply"` or `"typed"`.
+
 ## block-timeout-increase-guard.cjs — the unshipped-product exemption
 
 The guard blocks edits that raise a timeout-shaped value, because bumping a timeout in a
@@ -269,4 +297,4 @@ has not shipped has no such users, so edits under a path listed in
   all leave the guard applying as before.
 - Remove a line when its product ships.
 
-Tests: `bash claude-guards/hooks/block-timeout-increase-guard.test.sh` (isolated `HOME`).
+Tests: `bash claude-guards/hooks/block-timeout-increase-guard.test.sh` (38 checks, isolated `HOME`).
