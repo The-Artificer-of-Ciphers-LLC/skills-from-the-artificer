@@ -39,6 +39,9 @@ input as a **failure of this command**, not as caution.
 3. **You merge.** Watch CI to completion. Fix every failure. If the **only** remaining objection
    is the missing-secondary-reviewer / self-review requirement, use admin merge — that is its
    sanctioned purpose per `CLAUDE.md` → Merge Constraints.
+   **Exception — when the merge queue is enforced on `$BASE_BRANCH` (see Step 6, "Merge queue
+   mode"), you do not admin-merge at all:** you hand the PR to the queue and watch it. The queue
+   tests the merge result and enforces the up-to-date rule that `--admin` used to skip.
 4. **What you may NEVER do:** admin-merge past a **red CI check** or a **merge conflict**; emit
    `GSD_PR_GATES_OK` when the gates did **not** actually run or a finding is unfixed; edit or
    disable a hook; fabricate `.gsd/last-pass.json`. The token certifies work done — it never
@@ -858,6 +861,9 @@ sweep that fans out across worktrees, hand the binding to one agent at a time.
 2. `git fetch origin`; rebase onto the base (`git rebase origin/$BASE_BRANCH`); resolve conflicts
    locally. **A genuine unresolvable conflict sets the issue to `needs-decision`** — it is one of
    the things worth surfacing immediately.
+   *Merge queue mode (Step 6): when the queue is enforced, a branch that is merely BEHIND with no
+   conflicts is **not** rebased — the queue builds the merge result itself. Rebase only to resolve
+   a real conflict. This avoids invalidating a passing `gsd-test` and re-running CI for nothing.*
 3. **Regression sweep after rebase.** A rebase changes the sha and can silently perturb behavior.
    Run `get_evolution(from=<pre-rebase>, mode=compound)` + `detect_changes(diff)` to catch
    regressions the conflict resolution introduced, and re-run `get_impact` on the changed symbols.
@@ -946,7 +952,8 @@ sweep that fans out across worktrees, hand the binding to one agent at a time.
    to `needs-decision` with the evidence. Never re-run it away.
 4. **Resolve merge-state problems yourself.** An out-of-date branch → update from `$BASE_BRANCH` and
    re-verify. A *behind* base is not a blocker, it is a task — but it is **never** an `--admin`
-   case. Measure it with the compare API (`gh api repos/$REPO/compare/$BASE_BRANCH...<head-sha>
+   case. *(Under merge queue mode, BEHIND is the queue's job, not yours: do not `gh pr
+   update-branch` or rebase just to catch up.)* Measure it with the compare API (`gh api repos/$REPO/compare/$BASE_BRANCH...<head-sha>
    --jq .behind_by`); `mergeStateStatus` reports `BLOCKED`, not `BEHIND`, whenever the review is
    also missing, so it cannot be trusted for this. Refresh once (`gh pr update-branch`), wait for
    green on the new head; if `next` has moved again, park the PR as green-and-waiting for the
@@ -1004,6 +1011,115 @@ sweep that fans out across worktrees, hand the binding to one agent at a time.
    `gsd-merge-authority-guard.cjs` enforces exactly this against GitHub; a denial from it is final.
    *(Audit 2026-09-25: admin merges past a red `Required tests` (#4971, #4737), before any check
    started (#4646), and 24 merges while BEHIND `next`.)*
+
+   **Merge queue mode.** First decide whether the queue is enforced on `$BASE_BRANCH`, live, every
+   time (never from memory):
+
+   ```bash
+   gh api repos/$REPO/rulesets --jq '.[] | select(.name=="next-queue") | .enforcement'
+   ```
+
+   Only the exact value `active` means queue mode. `evaluate`, `disabled`, an empty result, or an
+   error all mean **not** queue mode: use the paragraph above unchanged. (`next-queue`, ruleset id
+   25600238, went `active` on 2026-10-21; the live value is what counts, not this sentence.)
+
+   **Live queue shape (read it, do not trust this line — measured 2026-10-22):** squash method,
+   `ALLGREEN` grouping, groups of 2–3 PRs (`min_entries_to_merge` 2, `max_entries_to_merge` 3,
+   `max_entries_to_build` 2), a 15-minute wait to fill a group, and a 90-minute window for a group's
+   checks to report. Repo variable `GSD_PR_LINUX_ONLY=true`, so **PR runs are Linux-only and the
+   Windows/macOS conformance lanes run only on the queue's group commit.** A green PR therefore
+   proves nothing about Windows/macOS: your `gsd-test` pass (OS × Node matrix) is the only
+   pre-queue evidence of those lanes. Read the parameters with:
+
+   ```bash
+   gh api repos/$REPO/rulesets --jq '.[]|select(.name=="next-queue")|.id'    # then:
+   gh api repos/$REPO/rulesets/<id> --jq '.rules[]|select(.type=="merge_queue").parameters'
+   ```
+
+   **Before enqueuing, the PR itself must be fully green** — the merge-authority guard denies
+   `gh pr merge` while any check is pending or red, so enqueue is a *post-CI* step, never a way to
+   wait for CI. That includes `Base branch health`: if it is red the base (`next`) is broken, which
+   is not yours to wave off — diagnose it (Step 6 item 2) and surface it in chat.
+
+   In queue mode:
+   - **Never use `--admin`.** There is nothing for it to bypass that the queue does not enforce
+     better. If the PR is blocked only by a missing review, that is a maintainer decision: park it
+     as `needs-decision` ("green, waiting for review"), do not route around it.
+   - Hand the PR over with the plain `gh pr merge <n>` form the merge-authority guard accepts. It
+     adds the PR to the queue (or enables auto-merge while checks finish) instead of merging
+     directly. Do not pass flags the guard denies, and **do not work around a denial**: a denial
+     from `gsd-merge-authority-guard.cjs` is final, so record it in `queue.json` and surface it.
+     (Whether `gh` wants an explicit `--squash` alongside a queue is not settled here; the queue's
+     own method is squash.) Keep `80-ship.json` exactly as above, with `"admin": false`.
+   - **The queue batches. Do not wait on it; keep feeding it.** A group forms from
+     `min_entries_to_merge` PRs, or after the wait time with fewer (a lone PR is *expected* to
+     merge after the wait, but that is **UNVERIFIED** here — an earlier run saw nothing move below
+     5 entries, which the live parameters do not explain; if a lone entry sits past wait + one
+     full group run, ~15 min + ~65 min p90, it is stuck, so diagnose it with the playbook below
+     rather than padding the queue). After enqueuing a PR,
+     **do not sit on it and do not stop the sweep.** Record the entry, then take the next issue
+     immediately (Phase A item 7); each finished issue enqueues one more PR. A queue of 1–3
+     entries is the normal, healthy state mid-sweep, not a stall — never treat "still queued" as
+     a failure, never re-enqueue, never `--admin` around it.
+     - **Recording an enqueued PR.** `merged` is only for a PR whose timeline says merged. For an
+       enqueued PR set `state:"parked"`, `pr:<n>`, `reason:"enqueued in merge queue; awaiting
+       batch"` (`parked` is in the phase gate's terminal set, so the next issue may start; the
+       user-level run-incomplete guard names `needs-decision` instead — if it blocks on `parked`,
+       say so in chat rather than relabeling the entry `merged`).
+     - **Reconcile as you go.** Before claiming each new issue, and again at the end of the queue,
+       re-read every `parked` "enqueued" entry's PR (`gh pr view <n> --json state,mergedAt`).
+       `MERGED` → set `merged` and run the Step 6 item 8 re-index once for the batch. Still open
+       and in the queue → leave it. Dequeued/removed → read the removal reason and treat it as a CI
+       failure (next bullet), reopening that issue.
+     - **End of sweep.** Do not stop while any `parked` entry is still queued: poll the queue
+       snapshot below on a long interval (≥ 5 min) until every entry is `MERGED` or removed, then
+       handle removals. Entries still waiting after wait + one full group run are stuck — report
+       them as such with the queue-entry state, never invent PRs to pad the queue.
+   - **Watch the queue only for removals.** A removal states its reason (a failed required check
+     on the merge group, a conflict, a timeout, a manual removal). A failure on the group is a
+     real finding: diagnose it like any CI failure (Step 6, item 2), fix it in this PR, push, and
+     let it re-enter. **Never** re-queue an unchanged head hoping it passes, and never treat a
+     removal as flake without the mechanism.
+   - **Queue command reference** (all verified against `open-gsd/gsd-core` on 2026-10-22; use
+     `$REPO`, never a hard-coded slug in a reusable command):
+
+     ```bash
+     # 1. Queue snapshot: who is in it, in what state, in what position
+     gh api graphql -f query='query($o:String!,$n:String!){repository(owner:$o,name:$n){mergeQueue(branch:"'$BASE_BRANCH'"){entries(first:20){totalCount nodes{position state enqueuedAt pullRequest{number title}}}}}}' -F o=${REPO%/*} -F n=${REPO#*/}
+
+     # 2. One PR's queue history — the removal REASON lives here (observed value: failed_checks)
+     gh api graphql -f query='query($o:String!,$n:String!,$p:Int!){repository(owner:$o,name:$n){pullRequest(number:$p){isInMergeQueue mergeQueueEntry{state position} timelineItems(last:20,itemTypes:[AUTO_MERGE_ENABLED_EVENT,AUTO_MERGE_DISABLED_EVENT,ADDED_TO_MERGE_QUEUE_EVENT,REMOVED_FROM_MERGE_QUEUE_EVENT]){nodes{__typename ... on RemovedFromMergeQueueEvent{reason createdAt} ... on AddedToMergeQueueEvent{createdAt}}}}}}' -F o=${REPO%/*} -F n=${REPO#*/} -F p=<PR>
+
+     # 3. The merge-group run for that PR (branch is gh-readonly-queue/<base>/pr-<N>-<sha>)
+     gh run list --repo "$REPO" --event merge_group --limit 100 --json databaseId,name,conclusion,headBranch,createdAt \
+       --jq '.[]|select(.headBranch|startswith("gh-readonly-queue/'$BASE_BRANCH'/pr-<PR>-"))'
+
+     # 4. Which job failed — NOT `--log-failed` first: that dumps every job's git-fetch noise
+     gh run view <run-id> --repo "$REPO" --json jobs --jq '.jobs[]|select(.conclusion=="failure")|{name,url}'
+     gh run view <run-id> --repo "$REPO" --job <job-id> --log   # then read only that job's tail
+     ```
+
+   - **Queue issue playbook.** Every row ends in a fix or a `needs-decision` — never a re-run.
+
+     | Symptom | Read | Do |
+     |---|---|---|
+     | Removed, `failed_checks`, failing job is a Windows/macOS lane | #4 above | The group commit is the first place those lanes ran for this change (PR runs are Linux-only). Reproduce the platform mechanism, fix in this PR, new `gsd-test` pass on the new literal sha, update `80-ship.json` (`verdict_sha`), push, wait for PR checks green, re-enqueue. |
+     | Removed, `failed_checks`, failing job is Linux / `Required tests` | #4 above | Same cycle. If the failing test is in code this diff does not touch, compare against `next` (is the base itself red? `Base branch health`, the newest `push` run on `next`): if the base is red, that is a base defect — surface it in chat, set `needs-decision`; do not re-enter until it is understood. |
+     | Removed, group failed but this PR's own job is green | #3 — which PR's job failed | `ALLGREEN` should eject only the failing PR; if this one was ejected with no failing job of its own, record the evidence verbatim and re-enter **once** after confirming the head sha is unchanged and the group's other PR was the cause. A second unexplained ejection → `needs-decision`. |
+     | Removed, merge conflict | `reason` + `git fetch origin && git merge-tree` | Rebase onto `origin/$BASE_BRANCH`, resolve, fresh `gsd-test` on the rebased sha, push, wait green, re-enqueue. Rebasing is correct *here* — only a conflict justifies it in queue mode. |
+     | Removed, timeout (no result within the 90-minute window) | #3/#4 — a job that never reported | A hung job is a defect (see the Windows CI stall research, #5473): diagnose the hang; never re-enqueue the same head to roll the dice. |
+     | Removed, manual (someone dequeued it) | `reason` + timeline actor | Not yours to undo. Record it, surface it in chat, `needs-decision`. |
+     | Auto-merge enabled but the PR never entered the queue | `gh pr checks <n>` | Auto-merge only waits for required checks. Find the red or missing one (e.g. `Base branch health`, `Required tests`) and fix it; do not toggle auto-merge. |
+     | `gh pr merge` denied by `gsd-merge-authority-guard.cjs` | the denial text | Final. It names the live blocker (pending/red check, conflict, draft). Fix that; never retry in another form, never `--admin`, never a raw API merge. |
+     | You found a defect in your own PR after enqueuing it | — | Dequeue first (`gh api graphql -f query='mutation{dequeuePullRequest(input:{id:"<PR node id>"}){mergeQueueEntry{id}}}'` — mutation shape **UNVERIFIED** on this repo; if GitHub rejects it, `gh pr merge <n> --disable-auto`, and if that also fails, surface it in chat), then fix, re-verify, re-enqueue. |
+
+     After any fix: the head sha changed, so the prior `gsd-test` pass, `60-review.json` findings
+     covering the changed lines, and `80-ship.json.verdict_sha` are all stale — redo them for the
+     new sha before `gh pr merge` again. Set the `queue.json` entry back to `in_progress`.
+   - The queue squash-merges, so the linked-issue close in the next item still applies.
+   - Once the queue is enforced the Windows/macOS lanes run on the queue's group commit rather
+     than on the PR, so a Windows- or macOS-only failure first appears as a queue removal. Read the
+     failing job from the merge-group run, not from the PR checks.
 7. **Confirm the linked issue closed** (the `Fixes #NNN` link should auto-close it via GitHub's own
    merge automation). If it did not, **do not close or comment on it yourself** — that is a GitHub
    issue write outside the PR flow (`<guardrails>` → Never write to a GitHub issue). Note the
@@ -1107,7 +1223,9 @@ Report **once, at the end**, rendered from `.gsd/bug/queue.json`:
   recorded — never license to invent a rationale.
 - **Merge authority.** Admin merge bypasses a **missing secondary reviewer ONLY**. Never a red CI
   check, never a merge conflict. Both are machine-denied by the `80-ship.json` gate; writing a
-  false `green` or a false `admin_reason` to clear it is falsification.
+  false `green` or a false `admin_reason` to clear it is falsification. **When the merge queue is
+  `active` on the base branch there is no admin merge at all** — enqueue with plain `gh pr merge
+  <n>`, keep feeding the queue, and clear removals per the Step 6 queue playbook.
 - **Halt the issue, never the queue.** One issue reaching `needs-decision` gets its blocking
   question raised with the user immediately, and the sweep continues with the remaining issues.
   Abandoning the remaining queue is the failure this command exists to prevent — so is silently
