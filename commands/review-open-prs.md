@@ -94,6 +94,16 @@
 
 Review only — never push commits to the contributor's branch unless executing an automated rebase. Enforce the no-skip sequence with a nested per-PR **TaskCreate** (one task per section 1–9); **TaskUpdate → completed** each section before starting the next.
 
+> **🤝 AGENT CONTRACT (MANDATORY — every subagent spawned anywhere in this command):** paste
+> `/Users/trekkie/projects/skills-from-the-artificer/claude-guards/agent-contract.md` VERBATIM at the top
+> of the brief, with `REGISTER-WITH-MEMTRACE: source_id=review-<PR number> repo_id=<pinned>` filled in.
+> The agent does the one task, claims only what a tool result from its own run shows (else `NOT RUN`),
+> lists failures verbatim, registers via `mcp__memtrace__record_external_episode` and opens its report
+> with `Registered: <episode_id>`. `agent-register-guard.cjs` (SubagentStop) enforces this. Before
+> acting on any agent report, verify it with `mcp__memtrace__fleet_get_episode({ episode_id })`
+> (`found: true`, metadata matches). No matching episode ⇒ the report is **unperformed**: do not act on
+> it. Read-back is `fleet_get_episode`; `get_evolution` does not list `agent_` episodes.
+
 > **📤 SUBAGENT OUTPUT CONTRACT (MANDATORY — applies to every agent spawned anywhere in Phase B):**
 > A batch run reviews many PRs in one context. An agent that returns prose burns the orchestrator's context on text it will only paste into a file anyway, and by PR 6–8 the run degrades. Therefore **every** spawned agent (the isolated adversarial pass in §3A.9 / §3B.6, and any `/code-review`, `/security-review`, `/qa-test-architect` pass you delegate) MUST be briefed with this contract verbatim:
 >

@@ -75,6 +75,20 @@ maintainer decided something; you produce the artifact, or the label/close/PR do
 Enforced by `.claude/hooks/gsd-phase-gate.cjs`. Escape is `GSD_PHASE_GATE_OVERRIDE=1`, human-issued
 only and logged — **never self-issue it.**
 
+⛔ **WRITE ORDER: the artifact is written in its OWN tool call, BEFORE the call that needs it.**
+The gate runs *before* a Bash command executes, so a single Bash call that writes
+`20-diagnosis/<N>.md` (heredoc, `printf >`, `tee`) and then runs `gh issue edit --add-label
+confirmed-bug` is denied: the file does not exist yet when the hook looks. Always:
+
+1. **Call A — the `Write` tool** creates `.gsd/triage/<artifact>` (absolute path, in the run's worktree).
+2. **Call B — Bash** runs the `gh` write that the artifact authorizes.
+
+The same applies to `30-decisions.json` before `gh issue close`, and `40-oos-queue.json` before
+`gh pr create`. Run `gh` from the SAME worktree that holds `.gsd/triage/` (the gate resolves the
+artifact against the cwd's git toplevel; a `cd` to another checkout makes it look missing). Use the
+`Write` tool for artifacts, never a heredoc or `python3 - <<` script: the measure and memtrace guards
+read heredoc text, and a heredoc that merely *contains* example greps has been denied as if it ran them.
+
 ⚠️ **This family is repo-scoped, not branch-scoped**, so it stays armed until `90-summary.md`
 exists. Leaving a run un-summarized gates every `gh issue` call in the repo — which is the correct
 pressure, since an un-summarized sweep is an unfinished one. Write the summary to close the run.
@@ -99,7 +113,81 @@ write.
 </artifact_contract>
 
 <memtrace_first>
-**Tool split (CodeGraph first, Memtrace for heavy hits).** Use CodeGraph (`codegraph_explore` / `codegraph` CLI) for symbol lookup, file reads, callers/callees, and ordinary blast radius. Reserve Memtrace (and cortex) for git history/evolution, `recall_decision`, cross-repo/API topology, risky blast radius (`get_impact`), PR review evidence, and dead code/complexity, because Memtrace costs quota. If `~/.claude/state/memtrace-quota.json` says `blocked` with a future `until`, never call Memtrace; use CodeGraph until that time.
+**Tool split (CodeGraph first, Memtrace for heavy hits).** Use CodeGraph (`codegraph_explore` / `codegraph` CLI) for symbol lookup, file reads, callers/callees, and ordinary blast radius. Reserve Memtrace (and cortex) for git history/evolution, `recall_decision`, cross-repo/API topology, risky blast radius (`get_impact`), PR review evidence, and dead code/complexity, because Memtrace costs quota. `~/.claude/state/memtrace-quota.json` exists ONLY while the quota is exhausted: a missing file means Memtrace is available (do not report it as an anomaly). If it exists and says `blocked` with a future `until`, never call Memtrace; use CodeGraph until that time.
+
+**Shell and lookup discipline (guard-enforced; every violation costs a denied call and a retry).**
+This is a Mac: the Bash tool runs **zsh 5.9 with BSD userland**, not bash/GNU. Write zsh the first time.
+- Quote every glob that is a flag value or a filename pattern (`--include='*.md'`, `-name '*.cjs'`);
+  an unquoted glob that matches nothing aborts the WHOLE command line (`zsh: no matches found`).
+  Use `(N)` for "maybe empty": `rm -rf -- "$T"/archive-*(N)`. Never put a risky glob in the same
+  call as work that must still run.
+- No bash-isms: `${v,,}`, `${!v}`, `declare -A`, `mapfile`, `read -a`, `BASH_REMATCH`, `$BASH_SOURCE`.
+  No GNU-isms: `sed -i` without `''`, `grep -P`, `date -d`, `timeout`, `xargs -r`, `stat -c`, `head -n -N`.
+  `zsh-guard` denies these and names the fix; read the fix, do not retry the same shape.
+- **Code lookup is CodeGraph and Memtrace. Not grep, sed, cat, awk, head or the Read tool on indexed source.**
+  Symbol: `codegraph query <name>`. How/where: `codegraph explore "<question>"`. A span:
+  `codegraph node -f <file> --offset N --limit M`. Callers/impact: `codegraph callers|impact <symbol>`.
+  Filtering that output is fine (`... | grep -n x` has no path operand). `memtrace-first-guard`
+  prints the exact `codegraph node -f <that file>` command in its denial: run it, do not reword.
+  Plain `grep`/`Read` stay correct for prose, config, `.md`, `.json`, `.yml`, and for git/gh output.
+- **Counts of text in prose are fine; counts of code constructs are not.** `grep -c … | wc -l` over
+  workflow/agent/reference markdown is allowed (the prose is the artifact). A text count over source
+  (`src/`, `scripts/`, `*.cjs`) is denied by `measure-dont-infer-guard` (comments and near-misses
+  inflate it): ask the graph (`find_code`, `get_repository_stats`) or `codegraph query`.
+- Write files with the `Write`/`Edit` tools. Do not generate files or edit scripts through heredoc /
+  `python3 - <<` pipelines (those bodies are scanned as commands by the guards).
+
+**Memtrace lane discipline (one graph lane per store: parallel callers get `graph lane busy`).**
+`memtrace start` / the first `memtrace mcp` is the single workspace owner; every other MCP session
+and every subagent attaches to it (docs: `concepts/architecture`, "One daemon per workspace,
+however many agents connect"). Heavy graph calls are admitted one at a time per store: while one
+`get_evolution` / `get_cochange_context` / `get_symbol_context` / `get_impact` is running, the next
+is refused after ~20s with `refused_because: wait_budget_spent, retryable: true`. A refused call is
+**a check that did not run**, never "no result".
+1. **Never put two heavy Memtrace calls in one parallel batch.** Issue them one per turn.
+2. On `graph lane busy`: wait ~30s and retry the SAME call, up to 3 attempts. Do not substitute a
+   different tool or stop the issue.
+3. Still refused after 3 attempts: write `get_evolution: DID NOT RUN (graph lane busy x3)` in the
+   diagnosis artifact, finish everything else, and have the ORCHESTRATOR run the missing calls
+   serially at the end, before any `confirmed-bug` label. A diagnosis is not stopped for this.
+4. Fan-out cap: at most **3 diagnosis agents at once**. Agents do reading, reproduction and
+   CodeGraph work in parallel; each agent issues Memtrace heavy calls sequentially, never batched.
+5. Cheap calls (`find_code`, `find_symbol`, `recall_decision`, `governing_rules`, `ask_docs`) are not
+   lane-gated, but still go one per turn when they feed a later call.
+
+**Freshness gate (step 0 runs this; the graph is only as new as the last trigger).** The watcher
+only covers paths it was told about, and `get_symbol_context`/`get_impact`/`find_symbol` read the
+canonical store, not a linked worktree's overlay. The index being "behind" means a trigger was
+skipped, not that Memtrace is slow. Run, in order, once per run and once after any code is written:
+1. `git fetch origin next` then compare `git rev-parse origin/next` with
+   `list_indexed_repositories[].graph_head_sha`. Behind ⇒ the next two steps are mandatory.
+2. `list_watched_paths`: if the working worktree path is absent, `watch_directory(path=<worktree>,
+   repo_id=<pinned>)`. It returns `index_scope.worktree_id`; record it in `00-run.json`. Per the
+   docs (`mcp/tools`), `watch_directory` itself triggers incremental re-indexing.
+3. Only if step 4 shows the overlay is still behind: `index_directory(path=<worktree>,
+   repo_id=<pinned>, incremental=true, skip_embed=true)`. `skip_embed=true` is right for triage
+   (structure, not semantic search).
+4. **Verify with `list_worktrees(repo_id, worktree_id)`, not with the job.** The overlay's
+   `last_updated` must be later than HEAD's commit time, and `file_count` plausible. Pass
+   `worktree=<worktree_id>` to `find_code`; the other graph tools do not take it, so confirm
+   anything they say against the worktree source with `codegraph node -f`.
+   **`check_job_status` is informational only and must not gate the run.** The docs define a job's
+   reportable state as its stage (scan → … → done), node/edge counts and `updated_at`; they define no
+   "stuck" state or timeout. Observed 2026-10-24: a job record stayed at `stage: scan, status: running,
+   0 nodes` while `list_worktrees` showed the overlay refreshed (344 files) 50 seconds after the
+   call, and the dashboard `/api/jobs` read `[]` because the record lives in the calling session's
+   `memtrace mcp`, not the workspace owner. Report job state exactly as returned
+   ("job record at stage scan, not updated since <ts>; overlay last_updated <ts>"); never write
+   "stuck" or "hung". Never wait on the job.
+5. `get_cochange_context` on a hot file returning "No co-change pairs … run `replay_history`" ⇒ run
+   `replay_history(repo_id, days=60)` ONCE, serialized, before fan-out. Co-change and `get_evolution`
+   history are empty until replay has run.
+6. After ANY commit or file write this run produces (KB PR, fixture, edit): the watcher picks up
+   the save in ~1s; verify with `detect_changes(diff=<git diff>)` and, if the write landed on
+   another branch, re-run step 3 for that path.
+Record the outcome in `00-run.json` as `"freshness": {"worktree_id", "graph_head_sha", "origin_next_sha",
+"indexed_at", "replayed": true|false}`. A diagnosis written against a graph head older than
+`origin/next` must say so in its "Memtrace calls made" section.
 
 **Environment fallback.** If the Memtrace MCP tools are not available at all (calls fail with `Unknown tool`), the run enters **Fallback Mode** instead of stalling:
 
@@ -193,6 +281,33 @@ answers "what constrains this code?" from exactly what a search result already g
 `symbol_id` pair only when a real numeric id is already in hand. Never synthesize one and never
 pass a symbol name to them.
 
+**Seed check — an unseeded Cortex store makes every lookup meaningless.** Cortex serves *captured
+decisions*: organic ones from working sessions, and governance ones only after
+`memtrace govern <dir>` has ingested the ADRs/standing rules (docs: `features/cortex`, `cli/govern`).
+Run ONCE in step 0, before any diagnosis:
+1. Probe with `recall_decision({query})` on a topic a known ADR governs (gsd-core: "planning
+   semantic model single owner milestone identity" must return ADR-3180). If the known ADR does not
+   come back, the store is unseeded and a "no relevant decision" from it proves nothing.
+   `governing_rules({repo_id, file_path})` is NOT a seed probe: it returned the same single ADR
+   (ADR-443) for every file even after 93 ADRs were ingested on 2026-10-24, so it does not scope
+   by path. Use it as a lookup only.
+2. Preview the ingest (read-only): `memtrace govern docs/adr` and `memtrace govern CONTEXT.md`.
+   Anything listed `accepted`/`proposed` that Cortex never returned is unseeded. Persisting it
+   (`--accept-all`, machine-global store) is a write: ask the maintainer once with `AskUserQuestion`.
+3. Until seeded, the deliberate-or-defect check is done from the documents themselves: `docs/adr/*`,
+   `CONTEXT.md`, `.out-of-scope/`, quoted with `file:line`. Record in the diagnosis artifact:
+   `Cortex: store unseeded for this repo; ran recall_decision/governing_rules (returned <what>); ADR check done by reading <files>`.
+4. Never write "no recorded decision" from a Cortex miss alone. Write one of: `Cortex returned
+   <ids>`, `Cortex returned nothing relevant (store seeded: yes|no)`, `Cortex unavailable`.
+5. When `recall_decision` DOES return an id relevant to the symptom, `verify_intent({decision_id})`
+   and `get_arc({decision_id})` are mandatory before `confirmed-bug` (they answer "did it hold").
+6. Health: `store.ingestLagBytes` from `memtrace cortex debug --json` (0 = caught up), plus a
+   `recall_decision` call that returns ranked decisions. Ignore `status.daemonRunning` and
+   `sidecarChildren` in that output: they read False/0 even while `memcortex-daemon` is running
+   (verified 2026-10-24 with the process up and recall working), because the probe does not see a
+   daemon owned by another `memtrace start`. Confirm liveness with `pgrep -fl memcortex`. Do not run
+   `cortex reset`.
+
 A `CannotProve` is an honest "no evidence", **not** a licence to assume the behavior is
 accidental. Behavior a recorded decision explicitly chose is `wontfix`/by-design, not
 `confirmed-bug` — check Cortex **before** you apply the fix gate.
@@ -235,7 +350,8 @@ labels and comments, not code, so it should almost never need a lease — but a 
 
 **Zero results / missing language stats are NOT permission to silently grep.** First confirm
 scope with `list_indexed_repositories`; if the repo is unindexed or stale, index it
-(`index_directory` → poll `check_job_status` to `done`) or say so — then diagnose. If you do
+(`index_directory`, then confirm with `list_worktrees` / `get_repository_stats`, not by waiting on
+`check_job_status`) or say so — then diagnose. If you do
 fall back, **say which rung failed**. Never label a bug `confirmed-bug` off a grep-only guess
 when Memtrace could have given you the graph. **Memtrace never executes tests** — a graph
 verdict is not a reproduction.
@@ -336,6 +452,30 @@ Applying these labels is explicitly maintainer-requested by this command, so it 
 self-approval of your own work.
 </label_vocab>
 
+<agent_contract>
+**Every subagent this command spawns runs under the agent contract.** Paste
+`/Users/trekkie/projects/skills-from-the-artificer/claude-guards/agent-contract.md` VERBATIM at the top
+of the brief (fill the `REGISTER-WITH-MEMTRACE: source_id=<kind>-<N> repo_id=<pinned>` line; nothing else
+in it is optional). The contract fixes the agent's scope to the one task, requires every claim to come
+from a tool result it obtained in that run (anything else is `NOT RUN`), requires failures to be listed
+verbatim in `not_run`, and requires the agent to register its result with
+`mcp__memtrace__record_external_episode` and open its report with `Registered: <episode_id>`.
+For this command: `source_id=triage-<issue number>`, `source_type=agent_triage`.
+
+Enforced, not requested: `agent-register-guard.cjs` (SubagentStop) re-queues a governed agent that has
+no successful registration for its `source_id`, or does not state the episode id, up to twice, then lets
+it through and logs `UNREGISTERED` to `~/.claude/logs/agent-register-guard.jsonl`.
+
+**The orchestrator verifies before it believes.** For every agent report, call
+`mcp__memtrace__fleet_get_episode({ episode_id })` (the id from the report's first line): `found: true`,
+`source_type` starts `agent_`, and `metadata` matches the report. Read-back is `fleet_get_episode`, not
+`get_evolution`/`get_changes_since` (those did not list `agent_` episodes on 2026-10-24). A report with
+no matching episode, an id that does not resolve, or a claim in prose that the metadata lacks, is
+**unperformed**: do not act on it (no label, comment, merge or close); re-dispatch or do the work
+yourself. A `UNREGISTERED` line in the log for an agent you dispatched is the same finding.
+The orchestrator also registers its own run (`source_id=triage-run-<date>`) in step 7.
+</agent_contract>
+
 <process>
 
 <step name="0_setup_and_scope">
@@ -346,11 +486,14 @@ clutter: a stale `90-summary.md` keeps this run DISARMED (the hook sees a finish
 diagnosed.
 
 - If `.gsd/triage/00-run.json` exists **and** `.gsd/triage/90-summary.md` exists, the earlier run
-  finished: run the step-8 cleanup block now, then continue.
+  finished: run the step-8 cleanup script (`--apply`) now, then continue.
 - If `00-run.json` exists **without** `90-summary.md`, an earlier run is still open. Read its
   `10-worklist.md`: any row without a disposition is unfinished tracker work. Tell the maintainer
-  which issues it left open, then run the step-8 cleanup block and start fresh. Those issues are
-  still `needs-triage` on the tracker, so this run picks them up again.
+  which issues it left open, then run the step-8 cleanup script (`--apply`) and start fresh. Those
+  issues are still `needs-triage` on the tracker, so this run picks them up again.
+- Also run the step-8 script in its default dry-run mode at the start of every run and report the
+  reclaimable MB; apply it when the maintainer says to, so stale scratch from earlier runs never
+  accumulates (it was 8.2 GB across 494 dirs on 2026-10-24).
 
 **Parse args** from `$ARGUMENTS`:
 - `--repo owner/repo` → target repo (default: detected below)
@@ -374,6 +517,11 @@ gh repo view --json nameWithOwner -q .nameWithOwner
   shares that path (one per active worktree), pin to the entry on the tracker's default branch
   and carry that exact `repo_id` string into every Memtrace call this run, including inside every
   fanned-out diagnosis agent's brief — never let a call infer it.
+- **Run the freshness gate and the Cortex seed check from `<memtrace_first>` now**, before the
+  fetch and before any agent exists: watch + incremental index of THIS worktree, `replay_history` if
+  co-change is empty, `governing_rules` on two unrelated files. Record `freshness` and the seed
+  result in `00-run.json`. A run that skips them diagnoses against a stale or empty graph and says so
+  nowhere.
 
 **Fetch the untriaged surface:**
 ```bash
@@ -418,21 +566,20 @@ author) reply *after* it (compare comment `author.login` + `createdAt`).
 
 - **Reporter supplied the requested info** → treat as a fresh defect candidate: route it
   into the **Defect lane** (step 3) and re-diagnose with the new information.
-- **No reporter reply and the wait is stale** (default: last activity > 14 days) → dispose:
+- **No reporter reply and the wait is stale** (default: last activity > 10 days) → dispose:
   post a stale-repro comment (facts + outcome only — no offers), 📄 **append the disposition to
   `.gsd/triage/30-decisions.json`** (`"lane": "needs-reproduction"`, `"verdict": "stale-close"`,
-  `"source": "policy:14d-no-reply"`, with the last-activity date as the rationale), then
+  `"source": "policy:10d-no-reply"`, with the last-activity date as the rationale), then
   `gh issue close N --reason "not planned"`. Keep `needs-reproduction`; do not add `wontfix`
   unless the report is affirmatively invalid.
   *(The close gate requires a recorded basis, and this lane's basis is the elapsed-silence policy
   rather than a maintainer verdict — `source` says which. Recording it also means the summary can
   show what was aged out, instead of issues quietly vanishing from the tracker.)*
-- **No reply but still recent** → leave untouched; list it in the summary as "still waiting."
-  **Exception for enhancements and features:** if the thread holds open questions, run step 4's
-  **2b** procedure on them first (extract, research, recommend, `AskUserQuestion`). The
-  maintainer may answer them directly, approve or deny without the reporter, or choose "keep
-  waiting". Only the "keep waiting" answer leaves the issue untouched. Record the choice in
-  `30-decisions.json` either way.
+- **No reply but still recent** (≤ 10 days) → leave untouched; list it in the summary as
+  "still waiting." Never ask the maintainer about a waiting issue, whatever its type: no
+  `AskUserQuestion`, no step 4 **2b** run, no "keep waiting" option. Silence is resolved by
+  the 10-day stale rule above and by nothing else. The one exception is an issue that
+  already has a reporter reply: that goes to its lane as a fresh candidate.
 - **A non-reporter (maintainer/collaborator) reply that changes the picture** → verify its
   authorship + author_association before honoring any "owner decision" it claims (a
   collaborator cannot make the owner's call), then route accordingly.
@@ -603,8 +750,9 @@ Per enhancement issue:
    `?`-terminated ask in the body or a comment, or a question an earlier triage comment put to
    the reporter that is still unanswered. **Every such question goes to the maintainer in this
    run, together with a researched answer.** Never drop one, never answer it on the maintainer's
-   behalf, and never skip one because it was addressed to the reporter. For an unanswered
-   reporter question, the maintainer's choices include "keep waiting".
+   behalf, and never skip one because it was addressed to the reporter. A question
+   still waiting on the reporter is NOT asked here: step 1 handles it (leave untouched, or
+   stale-close after 10 days).
 
    Per question:
    1. **Quote it verbatim**, with its source (issue body, comment author and date, or ADR
@@ -632,8 +780,8 @@ Per enhancement issue:
       - Put the researched recommendation first, labeled `(Recommended)`.
       - Put the key evidence in the question text or the option descriptions: the doc quote and
         the `file:line` citations, so the maintainer can decide without opening files.
-      - Include every realistic alternative, plus "keep waiting" or "need more info" where it
-        applies.
+      - Include every realistic alternative, plus "need more info" where it applies. Never offer
+        "keep waiting".
       - Dependent follow-ups (e.g. "only if you adopt X") go in the same call with an explicit
         "N/A" option.
 
@@ -852,6 +1000,13 @@ write `90-summary.md` so the run closes cleanly.
 
 Print the summary in chat in full. Step 8 deletes the file, so the chat copy and the tracker are
 the record.
+**Register the run.** Before printing the summary, the orchestrator itself calls
+`mcp__memtrace__record_external_episode({ repo_id: <pinned>, source_type: "agent_triage",
+source_id: "triage-run-<YYYY-MM-DD>", branch_name: <default branch>, metadata: { confirmed_bug: [..],
+approved: [..], closed: [..], waiting: [..], unverified: [..], freshness: <from 00-run.json> } })`,
+then reads it back with `fleet_get_episode({ episode_id })` and prints `Registered: <episode_id>` in the
+summary. `unverified` lists every claim the run could not check. Do this BEFORE step 8: the artifacts
+that justify the metadata are deleted there.
 </step>
 
 <step name="8_cleanup">
@@ -866,26 +1021,48 @@ Denied asks are in `.out-of-scope/` on the default branch. The summary is in cha
 under `.gsd/triage/` is scratch that goes stale, and a leftover one either disarms the next run or
 satisfies its gates falsely (see step 0).
 
-```bash
-T="$(git rev-parse --show-toplevel)/.gsd/triage"
-rm -rf -- "$T/00-run.json" "$T/10-worklist.md" "$T/20-diagnosis" "$T/30-decisions.json" \
-          "$T/40-oos-queue.json" "$T/90-summary.md" "$T"/archive-* "$T/_raw"
-ls -A "$T"
+Cleanup is one zsh script, not an inline `rm` (the old inline form died with
+`zsh: no matches found: …/archive-*`, aborted before deleting anything, and still printed a plausible
+listing). The script is zsh-native, uses `(N)` globs, and covers four things: this run's artifacts,
+dead worktree registrations, scratch worktrees under `/private/tmp` whose work is already pushed,
+and stale per-session scratch under `/private/tmp/claude-$UID/` (idle > 2 days, no live process inside).
+It keeps anything uncommitted, unpushed or in use, and lists what it kept and why.
+
+```zsh
+CLEAN=/Users/trekkie/projects/skills-from-the-artificer/claude-guards/bin/triage-cleanup.zsh
+zsh "$CLEAN"            # dry run: shows what it would remove and how many MB
+zsh "$CLEAN" --apply    # performs it
 ```
 
-Keep anything else in `.gsd/triage/`: reusable helpers such as an agent-brief preamble or a
-Memtrace stdio script are not run artifacts. Then, if this run created a worktree or branch for the
-KB PR, remove it once the PR is merged: `git worktree remove <path>` and
-`git branch -D <branch>`. The remote branch is already gone via `--delete-branch`.
+Always run the dry run first, then `--apply`, in two separate calls. The `--apply` output ends with
+the bytes freed, any `FAILED:` lines, and `ls -A` of `.gsd/triage/`; paste all three into the final
+message. A `FAILED:` line means cleanup did not complete: say so, do not report success. Keep anything
+else in `.gsd/triage/` (agent-brief preambles, stdio scripts are not run artifacts; the script only
+deletes the named run artifacts). If this run created a worktree or branch for the KB PR, the script
+removes the worktree once its branch is on the remote; `git branch -D <branch>` for the local branch
+after the PR is merged. The remote branch is already gone via `--delete-branch`.
 
-Report the `ls -A` output in the final message so the cleanup is visible.
+Verify with `ls -A "$(git rev-parse --show-toplevel)/.gsd/triage"` that only helper files remain. If
+the script is missing or errors, HALT and surface it; never fall back to an unquoted `rm … *` glob.
 </step>
 
 </process>
 
 <fanout>
-For a batch, spawn one diagnosis agent per defect and run them concurrently (single message,
-multiple Agent calls). **Bake tracker write-back into each agent's brief** — "report back" means
+For a batch, spawn one diagnosis agent per defect, **at most 3 at once** (the Memtrace graph lane is
+single-flight per store; seven concurrent agents produced `graph lane busy` refusals and an agent that
+stopped with no diagnosis). Start the next agent as one finishes. Every brief MUST carry these
+verbatim, because a fresh agent knows none of it:
+- the shell rules from `<memtrace_first>` "Shell and lookup discipline" (zsh on a Mac; quote globs;
+  `(N)`; no heredoc/`python3 -` file generation; `Write`/`Edit` for files; CodeGraph CLI for code);
+- the lane rules: Memtrace heavy calls one per turn, never batched; on `graph lane busy` wait ~30s
+  and retry the same call up to 3 times; if still refused write `DID NOT RUN` in the artifact and
+  carry on; **a refused Memtrace call is not a reason to stop the diagnosis**;
+- the write order: `Write` the artifact in one call, `gh` in the next, from the run's worktree;
+- the freshness record from `00-run.json` (`worktree_id`, graph head vs `origin/next`) to quote in
+  "Memtrace calls made", plus the Cortex seed result.
+The orchestrator runs any `DID NOT RUN` calls serially once the agents finish, and amends the artifact
+before any `confirmed-bug` label is applied. **Bake tracker write-back into each agent's brief** — "report back" means
 the agent posts its own `gh issue comment` (Diagnosis + Agent Brief) and sets labels
 (`needs-triage` → `confirmed-bug`), not just returns findings to the orchestrator. Boundary:
 diagnose + comment + label; **stop before any code edit or PR.** Give each agent the Memtrace

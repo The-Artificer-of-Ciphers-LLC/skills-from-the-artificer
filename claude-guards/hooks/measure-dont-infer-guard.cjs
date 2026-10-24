@@ -166,6 +166,34 @@ function recordDenial(pattern, targets, cwd) {
   }
 }
 
+// Replace each heredoc body (between `<<TAG` and its terminator line) with
+// blanks of the same length; the `<<TAG` line itself stays analysable.
+function blankHeredocBodies(command) {
+  const lines = command.split('\n');
+  const out = [];
+  let tag = null;
+  let strip = false;
+  for (const line of lines) {
+    if (tag !== null) {
+      const probe = strip ? line.replace(/^\t+/, '') : line;
+      if (probe.trim() === tag) {
+        tag = null;
+        out.push(line);
+      } else {
+        out.push(' '.repeat(line.length));
+      }
+      continue;
+    }
+    out.push(line);
+    const m = /<<(-?)\s*(?:'([^']+)'|"([^"]+)"|\\?([A-Za-z_]\w*))/.exec(line);
+    if (m) {
+      strip = m[1] === '-';
+      tag = m[2] || m[3] || m[4];
+    }
+  }
+  return out.join('\n');
+}
+
 function main() {
   let raw = '';
   try {
@@ -186,10 +214,15 @@ function main() {
   if (tool !== 'Bash') return allow();
 
   const input = (data && data.tool_input) || {};
-  const cmd = String(input.command || '');
+  let cmd = String(input.command || '');
   if (!cmd.trim()) return allow();
 
   const cwd = (data && data.cwd) || process.cwd();
+
+  // Heredoc bodies are DATA (a script or file being written), never commands.
+  // Without this, a command that merely writes grep examples into a file or
+  // feeds them to python/node is judged as if it ran them.
+  cmd = blankHeredocBodies(cmd);
 
   // 2026-09-09: the inline `# text-count-ok:` / `# raw-lines-ok:` escapes are
   // DELETED. They were self-issuable — the constrained party authored the
@@ -472,13 +505,31 @@ function main() {
     return DIR_LIST.some((d) => t === d || t.startsWith(d + '/'));
   }
 
+  // Prose targets: workflow/agent/reference markdown, docs, config. Counting a
+  // literal string in prose IS the measurement (the prose is the artifact), so
+  // a recursive count over only these is not an "inferred" code fact. Anything
+  // mixed with a source path still counts as source.
+  const PROSE_EXT_LIST = ['md', 'mdx', 'txt', 'rst', 'json', 'yml', 'yaml', 'toml'];
+  const PROSE_DIR_SEGMENTS = new Set([
+    'workflows', 'agents', 'references', 'commands', 'templates', 'docs', '.planning', '.github', 'skills',
+  ]);
+  function isProseTarget(target) {
+    if (typeof target !== 'string' || !target) return false;
+    const t = target.replace(/^\.\//, '').replace(/\/+$/, '');
+    if (extHasSourceExt(t) || isSourceDir(t)) return false;
+    if (PROSE_EXT_LIST.some((ext) => t.toLowerCase().endsWith('.' + ext))) return true;
+    return t.split('/').some((seg) => PROSE_DIR_SEGMENTS.has(seg));
+  }
+
   function targetLooksSource(targets, includeValue, recursive) {
     if (extHasSourceExt(includeValue)) return true;
     if (targets.some((t) => extHasSourceExt(t))) return true;
     if (targets.some((t) => isSourceDir(t))) return true;
     if (recursive) {
       const includeRestrictsAway = includeValue && !extHasSourceExt(includeValue);
-      if (!includeRestrictsAway) return true;
+      if (includeRestrictsAway) return false;
+      if (targets.length > 0 && targets.every(isProseTarget)) return false;
+      return true;
     }
     return false;
   }

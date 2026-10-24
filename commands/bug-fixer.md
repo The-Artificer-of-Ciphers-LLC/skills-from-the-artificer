@@ -367,6 +367,28 @@ formatting run locally; **tests do not.**
 
 ---
 
+<agent_contract>
+**Every subagent this command spawns runs under the agent contract.** Paste
+`/Users/trekkie/projects/skills-from-the-artificer/claude-guards/agent-contract.md` VERBATIM at the top
+of the brief (fill the `REGISTER-WITH-MEMTRACE: source_id=<kind>-<N> repo_id=<pinned>` line; nothing else
+in it is optional). The contract fixes the agent's scope to the one task, requires every claim to come
+from a tool result it obtained in that run (anything else is `NOT RUN`), requires failures to be listed
+verbatim in `not_run`, and requires the agent to register its result with
+`mcp__memtrace__record_external_episode` and open its report with `Registered: <episode_id>`.
+
+Enforced, not requested: `agent-register-guard.cjs` (SubagentStop) re-queues a governed agent that has
+no successful registration for its `source_id`, or does not state the episode id, up to twice, then lets
+it through and logs `UNREGISTERED` to `~/.claude/logs/agent-register-guard.jsonl`.
+
+**The orchestrator verifies before it believes.** For every agent report, call
+`mcp__memtrace__fleet_get_episode({ episode_id })` (the id from the report's first line): `found: true`,
+`source_type` starts `agent_`, and `metadata` matches the report. Read-back is `fleet_get_episode`, not
+`get_evolution`/`get_changes_since` (those did not list `agent_` episodes on 2026-10-24). A report with
+no matching episode, an id that does not resolve, or a claim in prose that the metadata lacks, is
+**unperformed**: do not act on it (no label, comment, merge or close); re-dispatch or do the work
+yourself. A `UNREGISTERED` line in the log for an agent you dispatched is the same finding.
+</agent_contract>
+
 <process>
 
 <step name="A_batch_intake">

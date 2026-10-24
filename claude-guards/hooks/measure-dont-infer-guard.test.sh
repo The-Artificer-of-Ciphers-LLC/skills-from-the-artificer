@@ -283,6 +283,23 @@ allow_case "for-loop accumulator over a non-source glob with a non-code pattern"
 allow_case "grep mention inside a quoted echo string, not executed" \
   'echo "grep -c foo src/"'
 
+echo "=== Prose targets + heredoc bodies ==="
+
+allow_case "recursive count of a path literal over workflows/ + agents/ markdown" \
+  'grep -rn "\.planning/STATE" gsd-core/workflows gsd-core/references agents | wc -l'
+
+allow_case "recursive -c over .md docs only" \
+  'grep -rc "readFileSync(" docs/ --include="*.md"'
+
+deny_case "prose dir mixed with a source dir still denies" \
+  'grep -rn "processExit()" gsd-core/workflows src/ | wc -l'
+
+allow_case "grep example inside a heredoc body is data, not a command" \
+  $'python3 - <<\'E\'\nx = "grep -rc processExit src/ | wc -l"\nE'
+
+deny_case "real grep AFTER a heredoc terminator still denies" \
+  $'cat <<\'E\'\nnotes\nE\ngrep -rc "processExit" src/'
+
 echo "=== Non-Bash tool_name, malformed/empty/missing input ==="
 
 run "$(mkpayload Read '')"

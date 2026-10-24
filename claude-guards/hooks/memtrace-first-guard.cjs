@@ -1412,14 +1412,41 @@ function allowWithNote(msg) {
   }));
 }
 
-function denyOutput(reasonFragment, toolLabel) {
+// The ONE compliant command for this denial, filled in with the real operand, so the
+// next call is a single step instead of a read-the-essay-then-guess retry loop
+// (the deny log shows ~2k Bash and ~700 Read denials, most re-asked immediately).
+function exactCompliantCommand(ctx, reasonFragment) {
+  try {
+    const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+    if (ctx.tool === 'Read') {
+      const f = ctx.input.file_path;
+      if (!f) return '';
+      const off = Number.isInteger(ctx.input.offset) && ctx.input.offset > 0 ? ctx.input.offset : 1;
+      const lim = Number.isInteger(ctx.input.limit) && ctx.input.limit > 0 ? ctx.input.limit : 400;
+      return `codegraph node -f ${q(f)} --offset ${off} --limit ${lim}   (then the Read of that span is allowed)`;
+    }
+    if (ctx.tool === 'Grep' || ctx.tool === 'Glob') {
+      const pat = ctx.input.pattern;
+      return pat ? `codegraph explore ${q(pat)}   (or mcp__codegraph__codegraph_explore with the same text)` : '';
+    }
+    const m = /path operand "([^"]+)"/.exec(reasonFragment || '');
+    if (!m) return '';
+    return `codegraph node -f ${q(m[1])} --offset 1 --limit 400   (add | grep -n 'pattern' or | head to filter its output; stdin pipes are not path operands)`;
+  } catch {
+    return '';
+  }
+}
+
+function denyOutput(reasonFragment, toolLabel, ctx) {
   const route = blockedRoute();
+  const exact = ctx ? exactCompliantCommand(ctx, reasonFragment) : '';
   let reason =
     'DO NOT REPHRASE THIS COMMAND TO GET PAST THIS GUARD.\n' +
     'Changing the glob, switching to a directory scan, splitting the path, or using a\n' +
     'different tool to ask the same question is circumvention, not problem-solving. If\n' +
     'this guard is firing wrongly, do not route around it: take the sanctioned path named below\n' +
     'and keep working. Do not stop and do not ask the user to type anything.\n\n' +
+    (exact ? `RUN THIS INSTEAD (one step, then continue): ${exact}\n\n` : '') +
     (route ? route + '\n\n' : '') +
     `MEMTRACE-FIRST guard (CodeGraph-first routing): ${toolLabel} is targeting an indexed source file (${reasonFragment}). ` +
     'Lookups and reads are low-risk: use CodeGraph (free, local, no quota) for them. ' +
@@ -1515,7 +1542,7 @@ async function main() {
   }
   if (reason) {
     try { recordDeny(ctx, reason); } catch { /* never affect the decision */ }
-    return denyOutput(reason, tool);
+    return denyOutput(reason, tool, ctx);
   }
   try { detectEvasion(ctx); } catch { /* never affect the decision */ }
   return allowOutput();
