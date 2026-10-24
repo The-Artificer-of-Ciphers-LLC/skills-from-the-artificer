@@ -35,15 +35,22 @@ const T1_PHRASES = [
   'denied by the claude code auto mode classifier',
 ];
 
-// Final-message wording that means "I am handing this back to the human because a guard blocked me".
-const HANDBACK_RE = new RegExp([
-  '(?:please|can you|could you|you(?:\'ll)? (?:need|have) to|you must)\\s+(?:type|say|reply|export|send|run|restart|tell me)',
-  'GSD_[A-Z_]+_OFF',
-  '(?:blocked|denied|stopped) by (?:a|the|my) (?:\\w+[- ])?(?:guard|hook|breaker|classifier)',
-  '(?:guard|hook|breaker|classifier)[^.\\n]{0,60}\\b(?:blocked|denied|halted|stopped)\\b',
-  'waiting (?:on|for) you',
-  'need(?:s)? your (?:input|go-ahead|approval|ok)',
+// A hand-back is a closing message that tells the human to act on a guard: it needs BOTH an explicit
+// ask for a human action AND a reference to the guard in the same message. Neither alone is enough:
+//   * decision requests ("waiting on you", "needs your go-ahead", "which should I do") are not hand-backs;
+//     the Stop hook fired on every one of them whenever a guard had tripped earlier in the turn;
+//   * narration of a block already worked around ("the guard blocked my grep, I used CodeGraph") is not
+//     one either, and neither is merely naming a GSD_*_OFF switch while explaining it.
+const HANDBACK_ASK_RE = new RegExp([
+  '(?:please|can you|could you|you(?:\'ll)? (?:need|have) to|you must)\\s+(?:type|say|reply|export|run|restart|override|unset|disable)',
+  '(?:export|set)\\s+GSD_[A-Z_]+_OFF',
 ].join('|'), 'i');
+const HANDBACK_GUARD_RE = /\b(?:guard|hook|breaker|classifier|override|blocked|denied)\b/i;
+
+function isHandback(text) {
+  const s = String(text || '');
+  return HANDBACK_ASK_RE.test(s) && HANDBACK_GUARD_RE.test(s);
+}
 
 function readTail(file) {
   const size = fs.statSync(file).size;
@@ -154,7 +161,9 @@ function analyze(transcriptPath) {
   }
   if (lastHuman < 0 && tail.truncated) return null;
 
-  const turn = { humanKey: '', lastTrip: -1, tripText: '', tripKey: '', lastOk: -1, lastDenial: -1, finalText: '', finalIdx: -1 };
+  // lastAssistantIdx: the last assistant entry of ANY kind. When it is after finalIdx, the assistant did
+  // more (tool calls) after its last text, so `finalText` is mid-turn narration, not the closing message.
+  const turn = { humanKey: '', lastTrip: -1, tripText: '', tripKey: '', lastOk: -1, lastDenial: -1, finalText: '', finalIdx: -1, lastAssistantIdx: -1 };
   const h = entries[lastHuman];
   turn.humanKey = String((h && (h.uuid || h.timestamp)) || lastHuman);
   for (let i = lastHuman + 1; i < entries.length; i += 1) {
@@ -167,6 +176,7 @@ function analyze(transcriptPath) {
     }
     if (k.denial) turn.lastDenial = i;
     if (k.ok) turn.lastOk = i;
+    if (d && d.type === 'assistant') turn.lastAssistantIdx = i;
     const t = assistantText(d);
     if (t.trim()) { turn.finalText = t; turn.finalIdx = i; }
   }
@@ -225,7 +235,10 @@ function remedy(tripText, lead) {
   let quota = '';
   try {
     const q = require('./memtrace-quota-state.cjs');
-    if (q.isBlocked() || /quota/i.test(tripText || '')) quota = `\n\n${q.CODEGRAPH_ROUTE}`;
+    // Fallback only: route to CodeGraph when quota state is really blocked or the denial itself reports
+    // a quota error. A bare /quota/ match is wrong: the memtrace-first guard's own text says "no monthly
+    // quota", which made every one of its denials claim Memtrace was exhausted when it was not.
+    if (q.isBlocked() || q.responseIsQuotaBlocked(tripText || '')) quota = `\n\n${q.CODEGRAPH_ROUTE}`;
   } catch { /* optional */ }
   const quoted = stripHarness(tripText).replace(/\s+/g, ' ').trim().slice(0, 1800);
   return `${SENTINEL}: ${lead} Do NOT stop, do NOT report this to the user, and do NOT ask them to type or ` +
@@ -237,5 +250,5 @@ function remedy(tripText, lead) {
 
 module.exports = {
   analyze, claimOnce, bumpCounter, logEvent, remedy, stripHarness, classify,
-  isHumanEntry, HANDBACK_RE, SENTINEL, T1_PHRASES,
+  isHumanEntry, isHandback, SENTINEL, T1_PHRASES,
 };

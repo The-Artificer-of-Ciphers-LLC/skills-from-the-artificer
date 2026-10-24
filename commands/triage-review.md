@@ -416,9 +416,12 @@ repo_path; pinned to the default-branch entry per mcp/tools repo-scope guidance"
 diagnosis agent inherits this pinned `repo_id` from the brief you give it — never leave a
 sub-agent to re-derive or infer its own.
 
-**`edges_indexed: 0` on a `status: "completed"` index is a failed run.** Nodes with zero edges means
-no relationships resolved — `get_impact` returns nothing useful while reporting success. Never
-write a Blast radius section from a zero-edge index.
+**Zero edges on a `status: "completed"` index is a finding to read, not a verdict.** With no
+resolved relationships `get_impact` returns nothing useful, so never write a Blast radius section
+from it. Before calling it failed, read `get_repository_stats` → `indexing_incomplete` and
+`scope_hint.likely_cause` (docs `mcp/tools#repository-stats-fields`): `branch_scope_mismatch` means
+the data is under another branch (pass the right `branch`, do **not** re-index). Never describe an
+index as stuck/stale/broken without quoting the field that says so.
 </memtrace_first>
 
 <label_vocab>

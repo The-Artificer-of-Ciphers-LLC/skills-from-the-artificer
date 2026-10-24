@@ -45,9 +45,20 @@ function run() {
   if (!turn || turn.lastTrip < 0) return;
 
   // Still blocked: no tool call has succeeded since the guard denied one, or Claude's closing
-  // message after the denial hands the block back to the human.
+  // message after the denial hands the block back to the human (an explicit ask AND a guard
+  // reference, see lib.isHandback; a question for the human is not a hand-back).
   const stillBlocked = turn.lastOk < turn.lastTrip;
-  const handedBack = turn.finalIdx > turn.lastTrip && lib.HANDBACK_RE.test(turn.finalText);
+
+  // The closing message. The Stop payload carries it (`last_assistant_message`), and that is exact. The
+  // transcript is only a fallback and can lag the Stop event by a moment: its last text is then an earlier,
+  // mid-turn message. It is the closing message only when no assistant entry (e.g. a tool call) follows it.
+  let closing = '';
+  if (typeof payload.last_assistant_message === 'string' && payload.last_assistant_message.trim()) {
+    closing = payload.last_assistant_message;
+  } else if (turn.finalIdx > turn.lastTrip && turn.finalIdx >= turn.lastAssistantIdx) {
+    closing = turn.finalText;
+  }
+  const handedBack = lib.isHandback(closing);
   if (!stillBlocked && !handedBack) return;
 
   if (lib.bumpCounter(payload.session_id, `stop:${turn.humanKey}`) > MAX_RESTARTS) {

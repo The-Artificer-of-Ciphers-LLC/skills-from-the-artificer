@@ -215,9 +215,13 @@ canonical `.memdb`. If `_meta` shows a mis-binding that config is missing — **
 re-index into the stray store**, which is what turns a harmless empty dir into a multi-megabyte
 one. (Cost an hour on 2026-08-07: six stray stores in one repo, one 6.4M.)
 
-**`edges_indexed: 0` on a `status: "completed"` index is a FAILED run**, not a finished one. Nodes
-with zero edges means no relationships resolved, so `get_impact` / `get_symbol_context` return
-nothing useful while reporting success. Never accept a zero-edge index as a basis for blast radius.
+**Zero edges on a `status: "completed"` index is a finding to read, not a verdict.** With no
+resolved relationships `get_impact` / `get_symbol_context` return nothing useful, so never base a
+blast radius on it. Before calling it failed, read `get_repository_stats` → `indexing_incomplete`
+and `scope_hint.likely_cause` (docs `mcp/tools#repository-stats-fields`): `branch_scope_mismatch`
+means the data is under another branch (pass the right `branch`, do **not** re-index);
+`stale_or_partially_written_repository_record` means the record is wrong. Never describe an index as
+stuck/stale/broken without quoting the field that says so.
 
 **Quota is not an error.** On quota exhaustion a metered tool still returns a *normal success*
 result whose payload is a quota-error JSON object. Read the payload — do not mistake it for

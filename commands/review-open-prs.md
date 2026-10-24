@@ -7,6 +7,8 @@
 > - `STALE_DAYS` = `5` — auto-close threshold for author inaction.
 > - `AUTONOMOUS` = `false` — when `false`, **stale/competing-loser PR-closures** are surfaced for confirmation before executing. Set `true` to also auto-close those without confirmation. This flag does **NOT** gate merges — see §9B: an Approved verdict merges immediately and unconditionally, in both modes. The only things that can stop a merge are the verdict itself (CI not yet confirmed green, a Blocker finding, or a mergeable-state check failing) — never a confirmation prompt.
 >
+> **⛔ NO SCOPE NEGOTIATION (ABSOLUTE — this is a command, not a conversation):** The queue defined in Phase A is the work. You MUST NOT ask the user to shrink, subset, prioritize, batch, defer, or re-confirm the list; MUST NOT offer "first N PRs", "only PRs with replies", "start with the new ones" or any scope menu via `AskUserQuestion` or prose; and MUST NOT stop, pause, or hand off because the queue is large, long-running, or expensive. Queue size, run time, token cost and graph-index staleness are never grounds to ask. Execute every queued PR through Phase B in order, then Phase C. No improvisation, no guessing, no deviation from the steps as written. `AskUserQuestion` is permitted ONLY for what this directive itself names: a follow-up in `<follow_ups_and_questions>` that needs the user's decision on that PR, a true git merge conflict, a direct conflict between instruction files, or the Phase C closure confirmation when `AUTONOMOUS` = `false`. Where the directive is silent, apply the nearest written rule; do not ask.
+>
 > **🚨 THE #4599 INCIDENT (never repeat this):** an earlier run posted `--approve` on a PR whose fork
 > CI matrix was still queued/running, then moved on to the next PR without waiting. The released CI
 > subsequently failed for a real, PR-caused reason (the diff grew a shipped `gsd-core/workflows/*`
@@ -92,6 +94,45 @@
 > call would exceed a tool timeout, just call it again next turn — that is still your own active
 > loop, not something to wait on externally. Do not produce a final report while CI is unresolved.
 
+> **📜 DELEGATION RULE (added after the 2026-10-23 sweep — the orchestrator's own paraphrased brief caused skipped
+> steps, excerpt-only diffs, self-decided follow-ups and unrequested instructions to authors):**
+> A sub-agent's prompt is THIS COMMAND, not a summary of it. Brief it with exactly: the path of this file
+> (`/Users/trekkie/.claude/commands/review-open-prs.md`), "read it in full and execute Phase B exactly as written for
+> `$PR = <n>` only", and nothing else. Do NOT add the orchestrator's own hints, "known base state" claims,
+> attribution conclusions, extra rules or reworded requirements; relay only the user's own words when they gave
+> some. The orchestrator then verifies the sub-agent's returned deliverables against the per-phase requirements
+> below (the §8.1 evidence section naming all four tools, the Artificer `## Laws that apply` block, the
+> `FILE:`-contract report files for every review pass, CI confirmed complete for the head SHA before any approval).
+> A report missing a required deliverable is NOT recorded as done: re-run the missing step. The orchestrator
+> never overrides or reclassifies a sub-agent's outcome on its own judgment; it surfaces the disagreement to the
+> user with `AskUserQuestion`. A sub-agent cannot call `AskUserQuestion`, so it returns every follow-up/judgment
+> question as a quoted QUESTION FOR THE USER and stops before posting anything that depends on it; the
+> orchestrator asks and relays the user's answer verbatim.
+>
+> **Mechanics every Phase B run must respect (tool limits, not shortcuts):**
+> - *Merge queue.* `next` uses a GitHub merge queue. A PR being BEHIND `next` is never a finding, a blocker, or a
+>   reason to ask for or push a rebase. Only a true content conflict (`CONFLICTING`, or `git merge-tree` failure)
+>   is reportable, under §1.5.
+> - *Read the whole conversation yourself* (per `<follow_ups_and_questions>`) before judging; never rely on a
+>   summary from another agent or session.
+> - *Full diffs.* Pass the full real diff text (`gh pr diff $PR`, including tests, docs, changeset and JSON) to every
+>   diff-taking Memtrace tool (`detect_changes`, `find_cross_module_issues`, `find_code_review_issues`,
+>   `find_yaml_rule_matches`, `find_ast_review_issues`). The tools take inline text, so chunk a large diff across
+>   calls until every changed file is covered; never hand-transcribe or excerpt a diff, and state in the review
+>   exactly what each tool covered.
+> - *Graph calls run strictly sequentially* (parallel calls hit "graph lane busy"). When a symbol is ambiguous across
+>   branch copies, pin `branch` and use the node id.
+> - *Skill names as installed:* `/diagnose` = `diagnosing-bugs`; `/writing-documentation-with-diataxis` =
+>   `writing-docs-with-diataxis`; `/root-cause-analysis` has no installed skill (say so in the review and do the
+>   root-cause comparison manually). Every other skill named in §3A/§3B (`/qa-test-architect`,
+>   `/skills-from-the-artificer`, `/code-review`, `/security-review`, `/rubber-duck`, `/codebase-design`,
+>   `/memtrace-skills:memtrace-change-impact-analysis`) MUST be made as real `Skill` tool calls and listed in the
+>   report; folding them into a manual read does not satisfy the requirement.
+> - *Add nothing to a posted review beyond the directive and the findings.* No extra instructions to the author, no
+>   rulings the user did not make.
+> - *Journal.* The worktree is left on the PR's branch; invoke the `maintainer-journal` skill and add an entry for
+>   the checked-out HEAD before finishing (a Stop hook requires it).
+
 Review only — never push commits to the contributor's branch unless executing an automated rebase. Enforce the no-skip sequence with a nested per-PR **TaskCreate** (one task per section 1–9); **TaskUpdate → completed** each section before starting the next.
 
 > **🤝 AGENT CONTRACT (MANDATORY — every subagent spawned anywhere in this command):** paste
@@ -128,7 +169,7 @@ Review only — never push commits to the contributor's branch unless executing 
 
    If mis-bound: **HALT this sweep and surface it.** Do not re-index (that writes a full graph into the stray store), and do not proceed on diff-only while reporting graph-backed conclusions. The fix is `MEMTRACE_MEMDB_DATA_DIR` + `MEMTRACE_DATA_DIR` on the MCP server registration, pointed at the canonical `.memdb`.
 
-   Equally, **`edges_indexed: 0` on a `status: "completed"` index is a failed run** — zero relationships resolved means every impact query is vacuous while reporting success. Confirm with `mcp__memtrace__get_repository_stats` (node counts by kind, total edges, community count, last-indexed time): a store bound correctly but populated hollowly fails in exactly the same approval-shaped direction as a mis-bound one.
+   Equally, **zero edges on a `status: "completed"` index is a finding to read, not a verdict** — with no relationships resolved every impact query is vacuous, so never approve on one. Confirm with `mcp__memtrace__get_repository_stats` (`indexing_incomplete`, `scope_hint.likely_cause`, node counts by kind, total edges — docs `mcp/tools#repository-stats-fields`): `branch_scope_mismatch` means the data is under another branch (pass the right `branch`, do **not** re-index). Never call an index stuck/stale/broken without quoting the field that says so.
 
 3. **The other three silent-zero modes.** §0.2 covers the mis-bound store. Three more failure modes return a *successful-looking* result that reads as "nothing wrong," and all three are live in a long batch sweep:
    - **Quota exhaustion.** 37 of Memtrace's ~75 core graph tools are metered. On exhaustion a metered tool **still returns a normal success result** — the payload itself is a quota-error JSON object, not a protocol-level error. A sweep runs dozens of metered calls per PR across many PRs, so hitting the ceiling mid-run is the expected case, not the exotic one. **Inspect the payload, not just the call status.** A quota-error payload is not a finding-free `get_impact`; treat it as a HALT for that PR, not as evidence.
@@ -165,7 +206,7 @@ Review only — never push commits to the contributor's branch unless executing 
 2. Read `CONTEXT.md` directly but **not linearly** — it is a machine-greppable predicate fact-store (`CLASS.subkey=value`, one fact per line) at ~300 KB, so a linear read is ~200 K tokens of mostly-irrelevant predicates. Per `CLAUDE.md` → CODE DISCOVERY, `CONTEXT.md` is `grep` territory: read its heading structure, then grep the predicates governing the surfaces this PR touches (`RULESET.TESTS.*`, `RULESET.CONTRIB.*`, `RULESET.PR-SCOPE.*`, and any `DEFECT.*` in the diff's area). Never delegate it — `META.RULE.brief-must-cite-doc` needs verbatim IDs you read yourself. Read `CONTRIBUTING.md` sections "Pull Request Guidelines" + "CHANGELOG Entries" fresh. Precedence: `META.RULE.canonical-source-precedence=CONTRIBUTING.md > docs/adr/* > CONTEXT.md > agent memory`.
 3. Review related open issues to ensure alignment. Address overlaps.
 4. `gh pr view $PR --json author,title,body,labels,headRefName,headRefOid,baseRefName,mergeable` — confirm author is NOT in `OWNER_LOGINS`/`OWNER_NAMES`. If it is, HALT (this PR). Keep `headRefName` + `headRefOid`; §1.6b needs both.
-5. **Merge Conflict Gate:** Verify mergeable state (pre and post-rebase). If `CONFLICTING`, post a request-changes review highlighting the exact conflicts for author resolution, then HALT (this PR).
+5. **Merge Conflict Gate:** **First apply the §1.8 staleness test** (no author activity since your last review/comment for more than `STALE_DAYS`): a stale PR is queued for closure and no new review is posted — a fresh review would restart the clock on an abandoned PR. Only then verify mergeable state (pre and post-rebase). If `CONFLICTING`, post a request-changes review (formal `--request-changes` with the §8.1 `### Memtrace Evidence` section — never a plain `--comment`) highlighting the exact conflicts for author resolution, then HALT (this PR). `BEHIND` with no conflict is NOT this gate (see the merge-queue rule under Phase B).
 6. **CI Status Gate — TWO checks, both required.**
    **⚠️ `statusCheckRollup` / `gh pr checks` CANNOT see a run that never started.** GitHub gates fork and first-time-contributor `pull_request` workflows at `action_required` pending maintainer approval. Those runs are **absent from the rollup entirely** — not pending, not failing, just missing — so a PR whose whole test matrix is unapproved reports **all-green with exit 0**. (Verified on PR #2412: `gh pr checks` → 8 checks, all pass, exit 0, while `Tests`, `Security Scan`, `Docs Required`, `Changeset Required`, and `Validate Branch Name` all sat at `action_required` for that exact head SHA. This is what made a batch of PRs look green.)
    - **6a. Rollup check** — `gh pr view $PR --json statusCheckRollup,mergeable,mergeStateStatus`. Any `FAILURE`/`ERROR` → post failure logs, request changes, HALT (this PR).
@@ -189,8 +230,8 @@ Review only — never push commits to the contributor's branch unless executing 
    - **6c. Record the pending run IDs — do NOT release them here.** Releasing costs real CI minutes on a fork PR, and at precondition time you have no verdict to justify spending them: §1 runs *before* the substance review in §§3–7. Capture `pending`, the run IDs, and their names into the PR's Phase-A task, then continue the review. The release decision belongs to **§9**, after findings are known.
      > This ordering is load-bearing. The earlier form of this step read "if the verdict is otherwise clean, approve the runs" — a verdict §1 cannot have. Following it literally means either releasing CI blind on every fork PR, or quietly deferring anyway with no step that owns the decision.
    - **6d.** A PR whose tests never executed is **not approvable** and **not mergeable** under §8's zero-tolerance policy. "Rollup was green" is not evidence tests ran. `pending > 0` does **not** by itself justify request-changes either — it is a maintainer-side gate, not a contributor defect. Judge the substance on the diff, then let §9 decide the release.
-7. **Activity State:** Run the full follow-up sweep from `<follow_ups_and_questions>` first. If the last comment/review was yours AND the sweep finds no new commits, comments, review-thread replies, or unresolved questions from anyone else, skip this PR and HALT (this PR). Any follow-up found is surfaced to the user with `AskUserQuestion` (paused) before the PR is judged.
-8. **Staleness Threshold:** If awaiting author action > `STALE_DAYS`, queue a close (per Batch write-action policy). Comment: *"Closing this PR as stale due to inactivity. We expect PRs to be followed up on within 5 days. Please feel free to reopen or submit a new PR when you have the bandwidth to continue this contribution."* Then HALT (this PR).
+7. **Activity State:** Run the full follow-up sweep from `<follow_ups_and_questions>` first. If the last comment/review was yours AND the sweep finds no new commits, comments, review-thread replies, or unresolved questions from anyone else, skip this PR and HALT (this PR) — **but only when your last action is less than `STALE_DAYS` old; once `STALE_DAYS` have passed since your last review/comment with no author activity (no commits, comments, replies, submissions), §1.8 applies and the PR is queued for closure, never skipped.** Measure from your last real review/comment, not from a broadcast notice posted to every PR (e.g. the merge-queue heads-up). Any follow-up found is surfaced to the user with `AskUserQuestion` (paused) before the PR is judged.
+8. **Staleness Threshold:** If awaiting author action > `STALE_DAYS` (no author activity since your last review/comment), queue a close (per Batch write-action policy). Check §1.8 BEFORE deciding to skip under §1.7. Comment: *"Closing this PR as stale due to inactivity. We expect PRs to be followed up on within 5 days. Please feel free to reopen or submit a new PR when you have the bandwidth to continue this contribution."* Then HALT (this PR).
 9. Extract linked issue. Per `CI.GATE.issue-link-required` — if missing, post request-changes review and HALT (this PR).
 10. `gh issue view <N> --json labels,title,body,state,stateReason,closedByPullRequestsReferences` for classification.
     - **10b. Closed-Issue Gate.** A PR whose linked issue is already `state: CLOSED` is reviewing work against a resolved target. The substantive review is wasted: the fix shipped, the labels reflect a decided outcome, and `Fixes #N`/`Closes #N` in the PR body is now an inert keyword that strands the PR open (nothing left to auto-close). Reject and close:

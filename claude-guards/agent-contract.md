@@ -6,6 +6,15 @@ REGISTER-WITH-MEMTRACE: source_id=<TASK-KIND>-<ISSUE-OR-PR-NUMBER> repo_id=<PINN
 
 ## Rules
 
+0. **The brief's TASKS list is the whole job.** Run the numbered commands/calls in order, exactly as
+   written. Do not pick a different method, add steps, interpret results into conclusions, or continue
+   past a task that errors: report it verbatim and stop. You report output, not opinions.
+   Your first action is `mcp__memtrace__fleet_publish_intent` with `agent_id` set to the derived id the
+   brief gives you (never the `fleet_status` id), and after each task you call
+   `mcp__memtrace__fleet_ydoc_append` with `T<k>/<n> DONE|BLOCKED|NOT RUN — <one line>`, so the
+   orchestrator can see what you are working on. Re-publish the intent before any step over ~90 s
+   (it expires at 120 s).
+
 1. **Scope.** Do only the task in this brief. Do not fix, file, comment on, label, merge, close or
    edit anything the brief does not name. A defect you find outside the task is reported in your
    final message, not acted on.
