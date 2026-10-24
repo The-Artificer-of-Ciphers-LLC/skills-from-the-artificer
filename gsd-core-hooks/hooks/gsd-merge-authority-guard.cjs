@@ -24,6 +24,16 @@ if (process.env.GSD_CORE_SCOPE_ANY !== '1') {
  * protections at once, so this gate queries GitHub LIVE at merge time and
  * never trusts a locally recorded artifact.
  *
+ * ## Merge queue mode
+ *
+ * When the base branch has an active `merge_queue` rule, `gh pr merge` only
+ * ENQUEUES the PR; the queue re-tests it on top of base plus the entries ahead
+ * of it. Being BEHIND base is then the queue's job, so the behind check is
+ * skipped, and `--admin` is denied (there is nothing legitimate to bypass).
+ * Draft, conflict, pending/red checks and never-reported required checks are
+ * still denied. Queue mode is read from the same live rules lookup as the
+ * required checks; if that lookup fails the guard assumes NO queue (strict).
+ *
  * A 2026-09-25 audit of 120 merges into `next` found admin merges past a red
  * Required tests check (#4971, #4737), admin merges before any check had even
  * started (#4646, #4707, #4708), and 24 merges while BEHIND next.
@@ -254,8 +264,24 @@ if (pr.mergeable !== 'MERGEABLE') {
   fail(`${label} mergeable state is ${pr.mergeable || 'UNKNOWN'}; not computed, re-query`);
 }
 
+// -- Merge queue mode (live; any lookup failure => strict, no queue) -------
+let queueActive = false;
+try {
+  const baseRules = JSON.parse(gh(['api', `repos/${repoSlug}/rules/branches/${pr.baseRefName}`]));
+  queueActive = (Array.isArray(baseRules) ? baseRules : []).some((r) => r && r.type === 'merge_queue');
+} catch { queueActive = false; }
+
+if (queueActive && admin) {
+  fail(
+    `${pr.baseRefName} has a merge queue; --admin has nothing to bypass and would skip the ` +
+    'queue\'s combined-tree test. Run `gh pr merge <n>` (no --admin) to enqueue the PR',
+  );
+}
+
 // -- Behind check ----------------------------------------------------------
+// In queue mode the queue re-tests on top of base, so being behind is not a defect.
 let compareRaw;
+if (!queueActive) {
 try {
   compareRaw = gh([
     'api',
@@ -282,6 +308,7 @@ if (typeof compare.behind_by === 'number' && compare.behind_by > 0) {
     'on the new head, then merge. If next keeps moving, stop and hand the green ' +
     'PR to the maintainer rather than looping.',
   );
+}
 }
 
 // -- Checks: newest per key --------------------------------------------

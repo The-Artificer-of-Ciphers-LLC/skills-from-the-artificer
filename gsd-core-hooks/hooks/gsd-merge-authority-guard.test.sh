@@ -39,5 +39,11 @@ pr contributor42 APPROVED "$green"; run "gh pr merge 7 --squash --repo open-gsd/
 pr alice REVIEW_REQUIRED "$green"; run "$ADMIN" GSD_MERGE_ADMIN_AUTHOR=alice,bob; [ -z "$OUT" ] && pass "GSD_MERGE_ADMIN_AUTHOR widens the set" || fail "env allow" "$OUT"
 pr trek-e REVIEW_REQUIRED "$green"; run "$ADMIN" GSD_MERGE_ADMIN_AUTHOR=alice; denied && pass "GSD_MERGE_ADMIN_AUTHOR replaces the default" || fail "env replace" "$OUT"
 pr contributor42 REVIEW_REQUIRED "$green"; run "GSD_MERGE_GATE_OVERRIDE=1 $ADMIN"; [ -z "$OUT" ] && pass "human override still works" || fail "override" "$OUT"
+pr contributor42 APPROVED "$green"; run "gh pr merge 7 --squash --repo open-gsd/gsd-core" FAKE_BEHIND=3; denied && pass "no queue, behind base: denied" || fail "no-queue behind" "$OUT"
+pr contributor42 APPROVED "$green"; run "gh pr merge 7 --repo open-gsd/gsd-core" FAKE_BEHIND=3 FAKE_QUEUE=1; [ -z "$OUT" ] && pass "queue active, behind base: allowed (enqueue)" || fail "queue behind" "$OUT"
+pr trek-e REVIEW_REQUIRED "$green"; run "$ADMIN" FAKE_QUEUE=1; denied && printf '%s' "$OUT" | grep -q 'merge queue' && pass "queue active: --admin denied" || fail "queue admin" "$OUT"
+pr contributor42 APPROVED "$red"; run "gh pr merge 7 --repo open-gsd/gsd-core" FAKE_QUEUE=1; denied && printf '%s' "$OUT" | grep -q 'checks failed' && pass "queue active: red check still denied" || fail "queue red" "$OUT"
+pr contributor42 APPROVED "$green" CONFLICTING; run "gh pr merge 7 --repo open-gsd/gsd-core" FAKE_QUEUE=1; denied && pass "queue active: conflict still denied" || fail "queue conflict" "$OUT"
+pr contributor42 APPROVED "$green"; run "gh pr merge 7 --repo open-gsd/gsd-core" FAKE_BEHIND=3 FAKE_QUEUE=1 FAKE_RULES_FAIL=1; denied && pass "rules lookup fails: stays strict (behind denied)" || fail "rules fail" "$OUT"
 run "gh pr view 7"; [ -z "$OUT" ] && pass "non-merge gh command untouched" || fail "non-merge" "$OUT"
 echo "---- $((N-F))/$N passed"; [ "$F" -eq 0 ]

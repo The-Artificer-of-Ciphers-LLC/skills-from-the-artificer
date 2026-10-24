@@ -15,6 +15,49 @@
  * Only inspects Bash commands; anything else is a no-op (exit 0, no output).
  */
 
+const fs = require('node:fs');
+
+// True when a GENUINE user message among the last USER_TURNS user turns of the
+// session transcript asks for a rerun. Anything that is not typed by the user
+// (hook feedback, system notifications, CI monitor events, tool results, meta
+// entries) is ignored. Any read/parse problem fails closed (returns false).
+const USER_TURNS = 6;
+const RERUN_ASK_RE = /\b(re-?run|run (?:it|them|the (?:tests?|jobs?|runs?|checks?)) again|re-?trigger|re-?try the (?:tests?|jobs?|run))\b/i;
+const NON_USER_PREFIX_RE = /^\s*(?:<ci-monitor-event>|<system-reminder|<task-notification>|\[SYSTEM NOTIFICATION|Stop hook feedback|<command-|Caveat:|\[Subagent hand-back\])/;
+
+function userRequestedRerun(payload) {
+  try {
+    const file = payload && payload.transcript_path;
+    if (typeof file !== 'string' || file.length === 0) return false;
+    const lines = fs.readFileSync(file, 'utf8').split('\n');
+    let seen = 0;
+    for (let i = lines.length - 1; i >= 0 && seen < USER_TURNS; i--) {
+      if (!lines[i]) continue;
+      let entry;
+      try { entry = JSON.parse(lines[i]); } catch { continue; }
+      if (!entry || entry.type !== 'user' || entry.isMeta === true) continue;
+      const msg = entry.message;
+      if (!msg || msg.role !== 'user') continue;
+      let text = '';
+      if (typeof msg.content === 'string') {
+        text = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        // A turn made only of tool_result blocks is not something the user typed.
+        text = msg.content
+          .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
+          .map((b) => b.text)
+          .join('\n');
+      }
+      if (!text || NON_USER_PREFIX_RE.test(text)) continue;
+      seen++;
+      if (RERUN_ASK_RE.test(text)) return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 let input = '';
 process.stdin.on('data', (d) => { input += d; });
 process.stdin.on('end', () => {
@@ -49,6 +92,15 @@ process.stdin.on('end', () => {
     (p) => p.re.test(cmd) && !(isReleaseDispatch && p.label === 'gh workflow run'),
   );
   if (!hit) {
+    process.exit(0);
+  }
+
+  // Human override: the user's own explicit request to re-run lifts the block.
+  // The guard stops an agent re-running CI on its own initiative; it must not
+  // stop the user from directing a re-run. A genuine user message in the last
+  // few turns asking for a rerun is the override. Hook feedback, system
+  // notifications, CI monitor events and tool results never count.
+  if (userRequestedRerun(payload)) {
     process.exit(0);
   }
 

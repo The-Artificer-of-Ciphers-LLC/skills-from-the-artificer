@@ -29,6 +29,12 @@ input="$(cat)"
 cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null || true)"
 [ -z "$cmd" ] && exit 0
 
+# Resolve every git call below against the SESSION's working directory, not the
+# hook process's own cwd ($CLAUDE_PROJECT_DIR = the main checkout). Without this a
+# session running in a linked worktree was gated on the main checkout's HEAD sha.
+hook_cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null || true)"
+if [ -n "$hook_cwd" ] && [ -d "$hook_cwd" ]; then cd "$hook_cwd" || true; fi
+
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
 # git COMMON dir is shared across linked worktrees; per-sha pass markers live
 # under it so N branches verify + ship in parallel without a single-file race.
