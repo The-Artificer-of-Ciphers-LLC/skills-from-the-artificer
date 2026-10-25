@@ -128,6 +128,14 @@ A pack of software-engineering laws, each loaded as an on-demand reference skill
 [`wirths-law/`](wirths-law/) ·
 [`zawinskis-law/`](zawinskis-law/)
 
+### Book-derived design skills
+
+Review and audit skills distilled from *A Philosophy of Software Design* and *Domain-Driven Design*. Each reports findings and hands off to a neighboring skill for redesign or documentation:
+
+[`aposd-red-flag-review/`](aposd-red-flag-review/) ·
+[`ddd-strategic-audit/`](ddd-strategic-audit/) ·
+[`ddd-tactical-review/`](ddd-tactical-review/)
+
 ## Install (recommended: the `skills` CLI)
 
 The [`skills`](https://skills.sh/) CLI discovers each top-level skill and installs it for you. Add `-g` to install globally (user-level, into `~/.claude/skills/`) instead of into the current project.
