@@ -70,6 +70,7 @@ Some of these originate upstream (e.g. the `swiftui-*` and `asc-*` sets); they'r
 | [`testflight-publish/`](testflight-publish/) | Orchestrates an end-to-end TestFlight release: pre-flight checks, archive, upload to App Store Connect, waiting for build processing, distributing to… |
 | [`testflight-release-notes/`](testflight-release-notes/) | Writes tester-facing TestFlight "What to Test" notes and App Store "What's New" release notes from raw developer input such as a git log since the… |
 | [`money-boundary-judgment/`](money-boundary-judgment/) | How to cross an API that forces Double (framework parameters, chart plot values, any Double-only library) without breaking a "Decimal for money"… |
+| [`ios-simulator-boot-health/`](ios-simulator-boot-health/) | Diagnose and handle iOS simulator boot failures ("PosterBoard status -5", no healthy simulator, a shard that ran no tests) on a shared Mac: what the failure is, safe vs unsafe `simctl` commands, and judging a test run by its log and xcresult instead of an exit status. Written for Coincert's `scripts/test-ios.sh`; adapt the UDIDs and env vars. |
 
 ## Not a skill
 
