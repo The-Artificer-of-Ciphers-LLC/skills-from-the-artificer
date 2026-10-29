@@ -49,24 +49,8 @@ if (tool === 'mcp__ccd_session__spawn_task' || /(^|__)spawn_task$/.test(tool)) {
   );
 }
 
-// (2) gh issue create|new — dual-use: legitimate maintainer triage vs. deferring a
-// self-found defect. Block by default; allow only with a deliberate, self-documenting
-// marker the user adds ONLY for genuine user-requested triage of a pre-existing /
-// user-reported issue — NEVER for a defect discovered while coding.
-if (tool === 'Bash') {
-  const cmd = String(input.command || '');
-  if (/\bgh\s+issue\s+(create|new)\b/.test(cmd) && !/GSD_ISSUE_TRIAGE_OK=1/.test(cmd)) {
-    deny(
-      'BLOCKED — no-defer rule (~/.claude/CLAUDE.md "NEVER DEFER A DEFECT").\n' +
-        'Do NOT open a GitHub issue for a defect you found — FIX it inline in the current change.\n' +
-        'This guard exists because filing/deferring a self-found defect is forbidden.\n' +
-        'Only for a DELIBERATE, legitimate issue — user-requested triage of a pre-existing /\n' +
-        'user-reported problem, OR a planned epic/roadmap sub-issue — may you re-run the command\n' +
-        'prefixed with GSD_ISSUE_TRIAGE_OK=1. NEVER for a defect you discovered while coding,\n' +
-        'and never to launder a defer.'
-    );
-  }
-}
+// (2) removed at the maintainer's direction: opening an issue is not gated; only
+// deferring/skipping a defect is (guards 1 and 3 remain).
 
 // (3) Tracking-intent language with no issue reference anywhere in the same body —
 // closes the "comment as tracking" anti-pattern (CONTRIBUTING.md, gsd-core): recording
