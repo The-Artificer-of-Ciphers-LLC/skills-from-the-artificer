@@ -1348,6 +1348,15 @@ single-PR path beyond the normal merge.*
 > `next` has moved again, hand the green PR to the maintainer — never `--admin` past it. Raw API
 > merges (`gh api .../pulls/N/merge`, GraphQL `mergePullRequest`) are forbidden.
 > `gsd-merge-authority-guard.cjs` enforces exactly this; a denial from it is final.
+>
+> **Merge queue mode (when `$BASE_BRANCH` has a `merge_queue` rule, as `next` does).** Do not wait
+> for CI and do not use `--admin`. Run `gh pr merge <literal n> --repo "$REPO" --squash` from the
+> PR's own worktree: it enqueues the PR, or enables auto-merge while checks run. The queue holds the
+> PR until required checks pass and re-tests the combined tree, so pending checks and BEHIND are
+> the queue's job; the guard still denies drafts, conflicts, red checks and `--admin`. Then watch
+> only for **ejection** (read the timeline reason; a real failure is a normal fix cycle, never a
+> re-run to green) or **merged**. For a stacked epic, the next phase still starts only after its
+> base PR has merged. Reference: `docs/research/merge-queue-on-next-rollout.md` §8 Phase 3, §9.
 > *(Audit 2026-09-25: admin merges into `next` past a red `Required tests` (#4971, #4737), before
 > any check started (#4646), and 24 merges while BEHIND — the rule existed only as this prose.)*
 </step>

@@ -45,5 +45,9 @@ pr trek-e REVIEW_REQUIRED "$green"; run "$ADMIN" FAKE_QUEUE=1; denied && printf 
 pr contributor42 APPROVED "$red"; run "gh pr merge 7 --repo open-gsd/gsd-core" FAKE_QUEUE=1; denied && printf '%s' "$OUT" | grep -q 'checks failed' && pass "queue active: red check still denied" || fail "queue red" "$OUT"
 pr contributor42 APPROVED "$green" CONFLICTING; run "gh pr merge 7 --repo open-gsd/gsd-core" FAKE_QUEUE=1; denied && pass "queue active: conflict still denied" || fail "queue conflict" "$OUT"
 pr contributor42 APPROVED "$green"; run "gh pr merge 7 --repo open-gsd/gsd-core" FAKE_BEHIND=3 FAKE_QUEUE=1 FAKE_RULES_FAIL=1; denied && pass "rules lookup fails: stays strict (behind denied)" || fail "rules fail" "$OUT"
+pending='[{"__typename":"CheckRun","workflowName":"CI","name":"Tests","status":"IN_PROGRESS","conclusion":""}]'
+pr contributor42 APPROVED "$pending"; run "gh pr merge 7 --repo open-gsd/gsd-core" FAKE_QUEUE=1; [ -z "$OUT" ] && pass "queue active, checks pending: allowed (queue holds it)" || fail "queue pending" "$OUT"
+pr contributor42 APPROVED "$pending"; run "gh pr merge 7 --repo open-gsd/gsd-core"; denied && printf '%s' "$OUT" | grep -q 'still pending' && pass "no queue, checks pending: still denied" || fail "no-queue pending" "$OUT"
+pr contributor42 APPROVED "$pending"; run "gh pr merge 7 --repo open-gsd/gsd-core" FAKE_QUEUE=1 FAKE_RULES_FAIL=1; denied && pass "rules lookup fails: pending stays denied (strict)" || fail "rules fail pending" "$OUT"
 run "gh pr view 7"; [ -z "$OUT" ] && pass "non-merge gh command untouched" || fail "non-merge" "$OUT"
 echo "---- $((N-F))/$N passed"; [ "$F" -eq 0 ]

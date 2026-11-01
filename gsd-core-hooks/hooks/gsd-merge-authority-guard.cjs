@@ -30,8 +30,10 @@ if (process.env.GSD_CORE_SCOPE_ANY !== '1') {
  * ENQUEUES the PR; the queue re-tests it on top of base plus the entries ahead
  * of it. Being BEHIND base is then the queue's job, so the behind check is
  * skipped, and `--admin` is denied (there is nothing legitimate to bypass).
- * Draft, conflict, pending/red checks and never-reported required checks are
- * still denied. Queue mode is read from the same live rules lookup as the
+ * Pending checks and not-yet-reported required checks are the queue's job too
+ * (GitHub holds the PR, or enables auto-merge, until they pass), so they are
+ * allowed. Draft, conflict and red checks are still denied. Queue mode is read
+ * from the same live rules lookup as the
  * required checks; if that lookup fails the guard assumes NO queue (strict).
  *
  * A 2026-09-25 audit of 120 merges into `next` found admin merges past a red
@@ -350,7 +352,11 @@ for (const { name, state } of newest.values()) {
   else if (!OK_STATES.has(state)) failed.push(`${name}=${state}`);
 }
 
-if (pending.length) {
+// Queue mode: `gh pr merge` enqueues the PR, or enables auto-merge while checks run
+// (docs/research/merge-queue-on-next-rollout.md, section 8 Phase 3). GitHub holds the PR
+// until its required checks pass and the queue re-tests the combined tree, so a pending
+// check on the PR head is not a merge past CI. Red checks stay denied below.
+if (pending.length && !queueActive) {
   fail(`checks still pending: ${pending.join(', ')} -- a merge before CI finishes is a merge past CI`);
 }
 if (failed.length) {
@@ -376,7 +382,7 @@ try {
 
 const reportedNames = new Set(Array.from(newest.values()).map((v) => v.name));
 const missingRequired = Array.from(requiredNames).filter((n) => !reportedNames.has(n));
-if (missingRequired.length) {
+if (missingRequired.length && !queueActive) {
   fail(
     `required check(s) never reported on this head: ${missingRequired.join(', ')}; ` +
     'a check that never ran is not green',
