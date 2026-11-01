@@ -164,9 +164,12 @@ skipped, not that Memtrace is slow. Run, in order, once per run and once after a
 2. `list_watched_paths`: if the working worktree path is absent, `watch_directory(path=<worktree>,
    repo_id=<pinned>)`. It returns `index_scope.worktree_id`; record it in `00-run.json`. Per the
    docs (`mcp/tools`), `watch_directory` itself triggers incremental re-indexing.
-3. Only if step 4 shows the overlay is still behind: `index_directory(path=<worktree>,
-   repo_id=<pinned>, incremental=true, skip_embed=true)`. `skip_embed=true` is right for triage
-   (structure, not semantic search).
+3. **Run it whenever step 1 shows the graph behind OR `list_worktrees(repo_id)` has no entry for this
+   worktree** (not only after step 4 looks bad: right after `watch_directory`, `list_worktrees` was
+   `[]` and `find_code(worktree=…)` said `worktree_overlay_requires_graph_refresh`, 2026-10-25):
+   `index_directory(path=<worktree>, repo_id=<pinned>, incremental=true, skip_embed=true)`.
+   `skip_embed=true` is right for triage (structure, not semantic search). `watch_directory` alone
+   is NOT a substitute; it returned `status: watching` with no overlay.
 4. **Verify with `list_worktrees(repo_id, worktree_id)`, not with the job.** The overlay's
    `last_updated` must be later than HEAD's commit time, and `file_count` plausible. Pass
    `worktree=<worktree_id>` to `find_code`; the other graph tools do not take it, so confirm
@@ -188,6 +191,44 @@ skipped, not that Memtrace is slow. Run, in order, once per run and once after a
 Record the outcome in `00-run.json` as `"freshness": {"worktree_id", "graph_head_sha", "origin_next_sha",
 "indexed_at", "replayed": true|false}`. A diagnosis written against a graph head older than
 `origin/next` must say so in its "Memtrace calls made" section.
+
+**"The graph is unusable" is not a conclusion this command may reach on its own.** 2026-10-25 a run
+saw `get_repository_stats` → `indexing_incomplete: true` + `scope_hint.likely_cause:
+branch_scope_mismatch` (data under the primary indexed branch, graph head behind `origin/next`),
+ran `watch_directory` once, called one `find_symbol` (no `branch` param, returned a test constant),
+and then wrote `get_impact / get_evolution / get_cochange_context DID NOT RUN (graph unusable)` into
+all eight diagnoses and used CodeGraph for blast radius. That is the failure. The docs
+(`mcp/tools#repository-stats-fields`, `concepts/workspaces`) say the stats are scoped to the
+**primary indexed branch, not the checkout**, that `branch_scope_mismatch` means "graph intact, scope
+wrong, do not re-index", and that a linked worktree is an **overlay** on the main repo's index
+refreshed by `index_directory` on the worktree path. A scope or freshness warning is therefore a
+reason to climb this ladder, never a reason to skip the graph. Do every rung, in order, and quote the
+result of each in `00-run.json` `freshness.attempts`:
+1. Stats/`scope_hint` read, then re-run `get_repository_stats(repo_id, branch=<primary_indexed_branch or
+   observed_branches_in_scope[0]>)`. Judge size from `store_live_node_count`/`store_live_edge_count`
+   in `scope_hint` (173k nodes there), not from the zero/5757 branch-scoped rows.
+2. Freshness-gate step 3 (`index_directory` incremental on the worktree), then `list_worktrees`.
+3. Locate symbols with `find_code(repo_id, query, worktree=<worktree_id>)` (the only tool taking
+   `worktree`) and by `file_path`; `find_symbol` has no `branch` and can miss.
+4. Call the heavy tools **with an explicit `branch`** (`get_impact`, `get_symbol_context`,
+   `get_cochange_context`, `get_evolution`, `get_timeline`, `analyze_relationships`, `detect_changes`
+   all take it), one per turn, against the branch that holds the data. If that branch is not `next`,
+   say so in "Memtrace calls made" and confirm every cited `file:line` with `codegraph node -f` on the
+   worktree.
+Observed 2026-10-25 after climbing it: `get_evolution(mode=summary)` showed ONE `git_commit` episode (the
+graph head, 0ce32128, 2026-10-19), so code added later (e.g. `isStatePastPhase`, 2026-10-20) returns
+`get_impact` → "Symbol not found in indexed graph"; `get_cochange_context` stays empty and
+`replay_history(days=60)` sent no response for 1800s and was aborted. Do not call `replay_history`
+in the foreground twice; it can block the session for 30 minutes. Once the symbol-level rungs return
+those verbatim results, the Memtrace half of the diagnosis is genuinely unavailable until the
+canonical branch is re-indexed, which needs the maintainer's say-so (below).
+Only a rung that **returned an error or an empty result after being attempted** may be written as
+`DID NOT RUN`/`no result`, with the verbatim error. "Looks unusable" and "indexing_incomplete" are not
+errors. If all four rungs genuinely fail, stop the Defect lane and ask the maintainer
+(`AskUserQuestion`) whether to index/replay the canonical `next` branch, instead of labelling
+`confirmed-bug` off CodeGraph alone. CodeGraph supplements Memtrace for line reads; it does not
+replace `get_impact` / `get_cochange_context` / `get_evolution` for the Blast radius, Coupled and
+Introduced-by sections.
 
 **Environment fallback.** If the Memtrace MCP tools are not available at all (calls fail with `Unknown tool`), the run enters **Fallback Mode** instead of stalling:
 
@@ -421,7 +462,9 @@ resolved relationships `get_impact` returns nothing useful, so never write a Bla
 from it. Before calling it failed, read `get_repository_stats` → `indexing_incomplete` and
 `scope_hint.likely_cause` (docs `mcp/tools#repository-stats-fields`): `branch_scope_mismatch` means
 the data is under another branch (pass the right `branch`, do **not** re-index). Never describe an
-index as stuck/stale/broken without quoting the field that says so.
+index as stuck/stale/broken without quoting the field that says so. `indexing_incomplete: true` with
+a `scope_hint` present is the same case: read `store_live_node_count`, re-run with the named branch,
+and continue down the ladder in "The graph is unusable is not a conclusion" above.
 </memtrace_first>
 
 <label_vocab>
@@ -1062,6 +1105,9 @@ verbatim, because a fresh agent knows none of it:
   and retry the same call up to 3 times; if still refused write `DID NOT RUN` in the artifact and
   carry on; **a refused Memtrace call is not a reason to stop the diagnosis**;
 - the write order: `Write` the artifact in one call, `gh` in the next, from the run's worktree;
+- the "graph is unusable is not a conclusion" ladder from `<memtrace_first>` (stats with explicit
+  `branch`, worktree index, `find_code(worktree=…)`, heavy tools with explicit `branch`); `DID NOT RUN`
+  needs the verbatim error of an attempted call;
 - the freshness record from `00-run.json` (`worktree_id`, graph head vs `origin/next`) to quote in
   "Memtrace calls made", plus the Cortex seed result.
 The orchestrator runs any `DID NOT RUN` calls serially once the agents finish, and amends the artifact
