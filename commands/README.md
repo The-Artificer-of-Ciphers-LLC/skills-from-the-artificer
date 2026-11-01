@@ -10,7 +10,7 @@ any, so it runs with whatever your session already grants.
 | [`feature-builder.md`](feature-builder.md) | `Feature Implementation.md` | Implements a feature issue or epic. Graph-backed research, recorded-decision and known-defect gauntlets, epic decomposition with seam validation, then a per-deliverable loop: design → TDD → mutation gate → two orthogonal reviews → docs → rebase → PR. |
 | [`bug-fixer.md`](bug-fixer.md) | `Bug Remediation and Diag.md` | Sweeps confirmed defects unattended and runs each **through merge** — diagnosis → failing-first TDD → two orthogonal reviews → PR → CI watch → merge. A blocked issue parks with a reason; the sweep continues. |
 | [`triage-review.md`](triage-review.md) | `Feature Review Directive.md` | Batch-triages untriaged issues. Defects get a diagnosis + agent brief + `confirmed-bug`; enhancements and features get a maintainer decision recorded on the tracker. |
-| [`review-open-prs.md`](review-open-prs.md) | `PR Review.md` | Reviews every open PR you did not author, with graph-backed impact and cross-module passes. |
+| [`review-open-prs.md`](review-open-prs.md) | `PR Review.md` | Reviews every open PR you did not author, with graph-backed impact and cross-module passes. Its per-PR sections live in [`review-open-prs.d/`](review-open-prs.d/) and are read by absolute path as each section is reached; the symlink install keeps them in place, a copy install must keep this repo checked out at the same path. |
 | [`test.md`](test.md) | — | Runs the test suite on Mac, Linux Docker, and Windows Docker in parallel, then categorizes failures by which platforms they hit (all-fail = real bug; single-platform = environment-specific). |
 
 ## Install

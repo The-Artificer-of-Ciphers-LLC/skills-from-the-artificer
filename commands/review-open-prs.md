@@ -25,7 +25,7 @@
 
 > **🛑 STRICT EXECUTION PROTOCOL (SEQUENCE ENFORCEMENT & MEMORY):** You are operating within an agentic coding harness (Claude Code). Execute the phases in strict order. Within each PR, do NOT skip ahead or jump to review posting until all prior sections are completed and their tasks marked done.
 >
-> **Skill / tool invocation notice:** Named skills are invoked with a slash (`/diagnose`, `/code-review`, `/security-review`, `/rubber-duck`, `/qa-test-architect`, `/skills-from-the-artificer`, `/writing-documentation-with-diataxis`, `/codebase-design`) or as `/memtrace-skills:<name>` for Memtrace workflow skills. Memtrace graph/analysis primitives are MCP tools named `mcp__memtrace__<tool>` — call them directly.
+> **Skill / tool invocation notice:** Named skills are invoked with a slash (`/diagnosing-bugs`, `/code-review`, `/security-review`, `/rubber-duck`, `/qa-test-architect`, `/skills-from-the-artificer`, `/writing-docs-with-diataxis`, `/codebase-design`) or as `/memtrace-skills:<name>` for Memtrace workflow skills. Memtrace graph/analysis primitives are MCP tools named `mcp__memtrace__<tool>` — call them directly.
 >
 > **Reading source in a batch run:** when a Memtrace result hands you a `file_path` + `start_line`/`end_line`, expand it with `mcp__memtrace__get_source_window` rather than `Read`. It returns a bounded, numbered window (default 8 before / 24 after, hard cap 400 lines) and accepts `mode: "map"` (signatures only) or `"lightweight"` for compression. Across 8+ PRs in one context, unbounded `Read` of changed files is the single largest avoidable context cost in this directive. Note `find_code` returns a *match window* — the optional `symbol_start_line`/`symbol_end_line` fields carry the full symbol span when the match was narrowed; use those only when you deliberately need the whole function.
 >
@@ -48,6 +48,9 @@
 
 ## Phase A — Enumerate target PRs & build the queue
 **[BLOCKING]** *Establish the work queue before touching any single PR.*
+00. **Load the Memtrace tool schemas this sweep uses — one call, before any Memtrace call.** Memtrace tools are deferred (their schemas are not in context until fetched); calling one before its schema is loaded fails with `InputValidationError`. Run exactly:
+   `ToolSearch({ query: "select:mcp__memtrace__fleet_status,mcp__memtrace__fleet_branch_context,mcp__memtrace__fleet_publish_intent,mcp__memtrace__fleet_get_episode,mcp__memtrace__fleet_record_episode,mcp__memtrace__get_changes_since,mcp__memtrace__get_daily_briefing,mcp__memtrace__list_indexed_repositories,mcp__memtrace__get_repository_stats,mcp__memtrace__list_worktrees,mcp__memtrace__find_central_symbols,mcp__memtrace__find_bridge_symbols,mcp__memtrace__preflight_check,mcp__memtrace__get_symbol_context,mcp__memtrace__get_impact,mcp__memtrace__analyze_relationships,mcp__memtrace__recall_decision,mcp__memtrace__governing_rules,mcp__memtrace__detect_changes,mcp__memtrace__find_cross_module_issues,mcp__memtrace__find_code_review_issues,mcp__memtrace__find_yaml_rule_matches,mcp__memtrace__find_ast_review_issues,mcp__memtrace__review_github_pr,mcp__memtrace__find_dead_code,mcp__memtrace__get_function_quality_metrics,mcp__memtrace__find_hotspots,mcp__memtrace__get_cochange_context,mcp__memtrace__get_style_fingerprint,mcp__memtrace__get_timeline,mcp__memtrace__get_source_window", max_results: 31 })`
+   Every other Memtrace tool this directive names (`verify_intent`, `get_arc`, `why_is_this_here`, `governing_contracts`, `find_dependency_path`, `list_processes`, `get_process_flow`, `get_evolution`, `get_episode_replay`, `get_api_topology`, `find_api_calls`, `find_api_endpoints`, `fleet_submit_verdict`, `fleet_get_escalation`, `ask_docs` / `search_docs` / `read_doc`) is loaded the same way (`select:mcp__memtrace__<name>`) at the step that first calls it. A deferred tool is still a required tool: "its schema was not loaded" is never a reason to skip a call. After a compaction, if a Memtrace call fails with `InputValidationError`, re-run the `select:` for that tool and retry the same call.
 0. **Check in with the fleet before building the queue.** This directive runs unattended and in
    parallel with other agents on the same repo — including `/bug-fixer`, which works the same
    issues from the issue side. Call `mcp__memtrace__fleet_status()` — confirm coordination is
@@ -66,13 +69,16 @@
 1. Initialize structural memory once for the whole run: invoke `/memtrace-skills:memtrace-first` to load the bi-temporal graph context (skip while Memtrace is in a quota cooldown).
    **Tool split (CodeGraph first, Memtrace for heavy hits).** Use CodeGraph (`codegraph_explore` / `codegraph` CLI) for symbol lookup, file reads, callers/callees, and ordinary blast radius. Reserve Memtrace (and cortex) for git history/evolution, `recall_decision`, cross-repo/API topology, risky blast radius (`get_impact`), PR review evidence, and dead code/complexity, because Memtrace costs quota. If `~/.claude/state/memtrace-quota.json` says `blocked` with a future `until`, never call Memtrace; use CodeGraph until that time.
 1b. **Establish the base-drift baseline once — not per PR.** Call `mcp__memtrace__get_changes_since` (or `mcp__memtrace__get_daily_briefing`, `window_hours` covering the oldest queued PR's `updatedAt`) against `next`. Record the returned `session_anchor` plus the changed files/symbols. Every queued PR is being reviewed against a base that has moved since the contributor last pushed; this snapshot is what §9.4 uses to attribute a red CI run to base drift instead of to the contributor, and computing it once beats re-deriving it inside every PR. `get_changes_since` auto-selects `overview` for a large window and `compound` for a focused one.
-2. Enumerate open PRs not authored by you:
+1c. **Risk-tier baseline once per sweep, not per PR.** Call `mcp__memtrace__find_central_symbols` and `mcp__memtrace__find_bridge_symbols` once each (identical parameters every time; add no `limit` the directive does not set) and write both complete results to `<scratchpad>/risk-tier-<short sha of origin/next>.json`. §1.11b reads this file instead of calling the tools again. Re-run both calls into a new file only after §9B merges a PR (`origin/next` moved). Never re-call them for a PR while the file for the current `origin/next` exists.
+2. Enumerate open PRs not authored by you — **one call, written to a file, not echoed into context**:
    ```bash
    gh pr list --state open --search "-author:@me" --limit 200 \
-	 --json number,url,title,author,headRefName,baseRefName,isDraft,updatedAt
+	 --json number,url,title,author,headRefName,baseRefName,isDraft,updatedAt > <scratchpad>/queue.json
    ```
+   - Apply the two filters below with `jq` against `<scratchpad>/queue.json` and print only the surviving rows' `number`, `title`, `author.login`, `updatedAt`. Do not re-list the queue from GitHub during the sweep; Phase B fetches each PR's live state itself (§1.4).
    - Drop any whose `author.login` ∈ `OWNER_LOGINS` or `author.name` ∈ `OWNER_NAMES` (defense in depth against `@me` resolving to a different identity).
    - If `SKIP_DRAFTS` = `true`, drop `isDraft: true` entries.
+   - Memory notes indexed in `MEMORY.md` are already in context by their index line; open a note file only when its line applies to the step at hand. Do not `cat` the memory directory.
 3. Create the run queue with the harness Task tools: **TaskCreate** one task per queued PR (title = `PR #<n> — <title>`). This is the batch progress ledger.
 4. For each queued PR, set `$PR` = that PR number and execute **Phase B** in full. Mark the PR's task `in_progress` on entry and `completed` on exit (record the outcome: `skipped` / `blocked` / `changes-requested` / `approved-merged` / `closed-closed-issue` / `closed-stale` / `closed-loser` / `contested`).
 
@@ -97,8 +103,8 @@
 > **📜 DELEGATION RULE (added after the 2026-10-23 sweep — the orchestrator's own paraphrased brief caused skipped
 > steps, excerpt-only diffs, self-decided follow-ups and unrequested instructions to authors):**
 > A sub-agent's prompt is THIS COMMAND, not a summary of it. Brief it with exactly: the path of this file
-> (`/Users/trekkie/.claude/commands/review-open-prs.md`), "read it in full and execute Phase B exactly as written for
-> `$PR = <n>` only", and nothing else. Do NOT add the orchestrator's own hints, "known base state" claims,
+> (`/Users/trekkie/.claude/commands/review-open-prs.md`), "read it in full, read each Phase B section file it
+> indexes in full when you reach it, and execute Phase B exactly as written for `$PR = <n>` only", and nothing else. Do NOT add the orchestrator's own hints, "known base state" claims,
 > attribution conclusions, extra rules or reworded requirements; relay only the user's own words when they gave
 > some. The orchestrator then verifies the sub-agent's returned deliverables against the per-phase requirements
 > below (the §8.1 evidence section naming all four tools, the Artificer `## Laws that apply` block, the
@@ -117,9 +123,20 @@
 >   summary from another agent or session.
 > - *Full diffs.* Pass the full real diff text (`gh pr diff $PR`, including tests, docs, changeset and JSON) to every
 >   diff-taking Memtrace tool (`detect_changes`, `find_cross_module_issues`, `find_code_review_issues`,
->   `find_yaml_rule_matches`, `find_ast_review_issues`). The tools take inline text, so chunk a large diff across
->   calls until every changed file is covered; never hand-transcribe or excerpt a diff, and state in the review
->   exactly what each tool covered.
+>   `find_yaml_rule_matches`, `find_ast_review_issues`), one whole file block per call, until every changed file is
+>   covered by every tool; never hand-transcribe or excerpt a diff, and state in the review exactly what each tool
+>   covered.
+>   - *Arm the fidelity guard first (§0.0).* `node ~/.claude/hooks/review-fidelity-guard.cjs arm $PR` fetches
+>     `gh pr diff` into `~/.claude/state/review-open-prs/diff-<PR>-<sha>.diff`, and the PreToolUse hook then denies
+>     any diff argument that is not an exact whole-file block of that reference, and denies `gh pr review
+>     --approve|--request-changes` until every required tool ran on every changed file.
+>   - *Pass each block by reference, not by retyping it:* `diff: "@pr-block <repo-relative path of the changed
+>     file>"`. The hook replaces it with that file's complete, verbatim block from the armed reference and records
+>     the same ledger row as an inline block. This is the required form for every diff-taking call: the tool
+>     receives the identical full block, and the text is copied by the hook rather than re-emitted by the model, so
+>     it cannot drift. A path that matches more than one block is denied; name the file by its exact repo path.
+>   - *Read the reference diff once per PR* to review it yourself (per file, in full); do not paste it into tool
+>     arguments.
 > - *Graph calls run strictly sequentially* (parallel calls hit "graph lane busy"). When a symbol is ambiguous across
 >   branch copies, pin `branch` and use the node id.
 > - *Skill names as installed:* `/diagnose` = `diagnosing-bugs`; `/writing-documentation-with-diataxis` =
@@ -133,11 +150,15 @@
 > - *Journal.* The worktree is left on the PR's branch; invoke the `maintainer-journal` skill and add an entry for
 >   the checked-out HEAD before finishing (a Stop hook requires it).
 
-Review only — never push commits to the contributor's branch unless executing an automated rebase. Enforce the no-skip sequence with a nested per-PR **TaskCreate** (one task per section 1–9); **TaskUpdate → completed** each section before starting the next.
+Review only — never push commits to the contributor's branch unless executing an automated rebase. Enforce the no-skip sequence with a nested per-PR **TaskCreate** (one task per section in the Phase B section index below); **TaskUpdate → completed** each section before starting the next.
 
-> **🤝 AGENT CONTRACT (MANDATORY — every subagent spawned anywhere in this command):** paste
-> `/Users/trekkie/projects/skills-from-the-artificer/claude-guards/agent-contract.md` VERBATIM at the top
-> of the brief, with `REGISTER-WITH-MEMTRACE: source_id=review-<PR number> repo_id=<pinned>` filled in.
+> **🤝 AGENT CONTRACT (MANDATORY — every subagent spawned anywhere in this command):** open every brief
+> with these two lines, verbatim apart from the filled-in values:
+> `AGENT CONTRACT: Read /Users/trekkie/projects/skills-from-the-artificer/claude-guards/agent-contract.md in full before doing anything else, and follow it exactly. It is binding.`
+> `REGISTER-WITH-MEMTRACE: source_id=review-<PR number> repo_id=<pinned>`
+> The agent reads the identical contract text in its own context; do not paste or paraphrase the contract into
+> the brief. Memtrace tools are deferred in sub-agents too: the agent loads
+> `mcp__memtrace__record_external_episode` with `ToolSearch select:` before registering.
 > The agent does the one task, claims only what a tool result from its own run shows (else `NOT RUN`),
 > lists failures verbatim, registers via `mcp__memtrace__record_external_episode` and opens its report
 > with `Registered: <episode_id>`. `agent-register-guard.cjs` (SubagentStop) enforces this. Before
@@ -160,391 +181,30 @@ Review only — never push commits to the contributor's branch unless executing 
 >
 > The orchestrator assembles the §8 review body by reading the returned `FILE:` paths — it does NOT rely on agent reply text. If an agent returns prose instead of the contract, re-brief it; do not paste its reply into the review body.
 
-### 0. Context anchoring
-**[BLOCKING]**
-1. Structural memory is already loaded (Phase A.1). Confirm the target repo is indexed via `mcp__memtrace__list_indexed_repositories`; if `$PR`'s changed paths are not covered, note it — graph-backed checks below degrade to diff-only for uncovered files.
-2. **Assert you are bound to the right `.memdb` — read `_meta` on that first response.** Every Memtrace response carries `_meta.data_dir`, `_meta.workspace_root` and `_meta.anchor_source`. **`anchor_source: git_root` while `workspace_root` is your intended workspace means the client is mis-bound**: you are reading a worktree-local store, not the shared one. Data-dir resolution stops at a git worktree instead of ascending to the `.memtrace-workspace` marker, and this command runs in worktrees.
+### Phase B sections — one file each, read in full when reached
+**[BLOCKING]** The per-PR sections live in `/Users/trekkie/projects/skills-from-the-artificer/commands/review-open-prs.d/`. They are part of this directive, word for word; splitting them out only changes *when* each one enters context, not what it requires.
 
-   This matters more here than anywhere else in the sweep, because **a mis-bound store fails silently in the direction of approval.** Every graph-backed check in §4 — blast radius, cross-module issues, impact — returns "nothing found" against a near-empty database, which is indistinguishable from "nothing wrong." You would approve a PR on the strength of checks that never ran. A non-empty wrong store does not trip `_meta.empty_state_reason` either; that guard only fires on an empty result.
+- **Read each section file in full, with `Read` (no `offset`/`limit`), at the moment its nested per-PR task goes `in_progress`** — before taking any action that section governs. Never act on a section from memory of an earlier PR.
+- **Within one sweep, a section file already read stays in context; do not read it again** unless a compaction has happened since, or its text is no longer in context. A section the PR never reaches (§3A on a feature PR, §3B on a bug fix, §9 with `pending == 0`, §9B without an approval, §9A when not behind) is not read for that PR.
+- **After a compaction:** re-read this core file once, then only the section file whose task is `in_progress`. Do not re-read the whole directive or sections already completed for the current PR.
+- Section numbers and cross-references (`§1.6c`, `§8.1`, `§9.4`, …) are unchanged; a reference to a section you have not read yet means: read that file before relying on it.
 
-   If mis-bound: **HALT this sweep and surface it.** Do not re-index (that writes a full graph into the stray store), and do not proceed on diff-only while reporting graph-backed conclusions. The fix is `MEMTRACE_MEMDB_DATA_DIR` + `MEMTRACE_DATA_DIR` on the MCP server registration, pointed at the canonical `.memdb`.
+| Section | File | Reached |
+|---|---|---|
+| §0 Context anchoring | `00-anchoring.md` | every PR |
+| §1 Preconditions | `01-preconditions.md` | every PR |
+| §2 Classify via linked-issue labels | `02-classify.md` | every PR |
+| §3A Bug-Fix Track | `03a-bugfix-track.md` | `confirmed-bug` |
+| §3B Feature / Enhancement Track | `03b-feature-track.md` | `approved-feature` / `approved-enhancement` |
+| §3D Deterministic Review Pass | `03d-deterministic-pass.md` | every PR (invoked by §3A.7 / §3B.7) |
+| §4A–§4C Test quality, CONTEXT.md conformance, co-change | `04-standards-cochange.md` | every PR |
+| §5–§7 External tools, PR format, competing PRs | `05-07-integration-format-competing.md` | every PR |
+| §8 Compose and post the review | `08-compose-post.md` | every PR |
+| §9 Release queued fork CI | `09-release-ci.md` | `pending > 0` |
+| §9B Merge on approval | `09b-merge.md` | after an `--approve` is posted |
+| §9A Push a rebase | `09a-rebase.md` | after §8 posts, branch behind |
 
-   Equally, **zero edges on a `status: "completed"` index is a finding to read, not a verdict** — with no relationships resolved every impact query is vacuous, so never approve on one. Confirm with `mcp__memtrace__get_repository_stats` (`indexing_incomplete`, `scope_hint.likely_cause`, node counts by kind, total edges — docs `mcp/tools#repository-stats-fields`): `branch_scope_mismatch` means the data is under another branch (pass the right `branch`, do **not** re-index). Never call an index stuck/stale/broken without quoting the field that says so.
-
-3. **The other three silent-zero modes.** §0.2 covers the mis-bound store. Three more failure modes return a *successful-looking* result that reads as "nothing wrong," and all three are live in a long batch sweep:
-   - **Quota exhaustion.** 37 of Memtrace's ~75 core graph tools are metered. On exhaustion a metered tool **still returns a normal success result** — the payload itself is a quota-error JSON object, not a protocol-level error. A sweep runs dozens of metered calls per PR across many PRs, so hitting the ceiling mid-run is the expected case, not the exotic one. **Inspect the payload, not just the call status.** A quota-error payload is not a finding-free `get_impact`; treat it as a HALT for that PR, not as evidence.
-   - **Stale graph on cross-module review.** `find_cross_module_issues` deliberately returns **zero issues plus a `_graph_state` note** when the graph is stale, rather than guessing. Zero issues with a `_graph_state` warning is *not* a clean cross-module verdict — re-run §1.11's `detect_changes` refresh and query again before reporting it as clean.
-   - **Empty-result reasons.** `list_indexed_repositories` and other reads carry `_meta.empty_state_reason`. Read it before concluding a path is uncovered.
-4. **Worktree overlays.** This command runs inside worktrees and does `gh pr checkout` per PR, so overlay state is load-bearing. `mcp__memtrace__list_worktrees` lists overlays per `repo_id:worktree_basename` with branch, path, and file-diff count vs main — use it to confirm the PR's checkout is the overlay you are querying. Note the asymmetry: **only `find_code` takes a `worktree` parameter**; the expansion tools (`get_symbol_context`, `get_impact`, `preflight_check`) do not, so a locate-then-expand chain silently drops back to the branch view. Do not run `cleanup_worktrees` during a sweep — it sweeps overlays that other PRs in the queue may still need.
-5. **`repo_id` ambiguity — distinct from #4, and it hits every call, not just `find_code`.** A shared `.memdb` indexes every active worktree of this repo as its own `repo_id` (same `repo_path`, different `branch`) — this sweep's own worktree, plus any concurrent issue/feature/PR worktrees another session has open. `list_indexed_repositories` returns a healthy, populated list regardless, so this is invisible to the binding check in #2 — it is not mis-binding, it is unsafe inference. Per the Memtrace MCP's own tool docs: *"find_code and find_symbol infer the session repo only when one choice is safe. In an ambiguous multi-repo workspace, call list_indexed_repositories once and pass repo_id explicitly."* Resolve this per-PR, not once for the whole sweep: after each `gh pr checkout`, re-run `list_indexed_repositories`, filter to entries sharing this repo's `repo_path`, and pin `repo_id` to the entry whose `branch` matches the PR branch you just checked out (re-index that worktree first if it is not yet present or is stale for this branch — see #1). Pass that literal `repo_id` on every graph call for that PR; do not carry a prior PR's pinned `repo_id` forward or let any call infer it.
-
-### 1. Preconditions
-**[BLOCKING]**
-1. **Initialize & Rebase State — DETECT HERE, PUSH IN §9A. Never rebase-push at precondition time.**
-   Fetch `origin/next`. Compare the PR branch base against `origin/next`. If the PR branch is
-   behind, record **how far behind** and **whether it rebases cleanly** — prove the latter in a
-   throwaway worktree (`git worktree add --detach`, rebase, inspect) or with `git merge-tree`.
-   **Do NOT push the rebase here.**
-
-   > A rebase-push force-updates a *contributor's* branch and triggers their full CI matrix. Both
-   > are real costs spent on someone else's repo, and at precondition time you have **no verdict**
-   > that justifies either — §1 runs before the substance review in §§3-7. This is the identical
-   > ordering error §1.6c already corrects for CI release, and it is corrected here for the
-   > identical reason. The earlier form of this step read "execute rebase onto `origin/next`"
-   > inline, which means force-pushing every behind-branch in the queue before knowing whether the
-   > diff is even sound. Record the finding, carry it into the review, and let **§9A** decide.
-
-   - **If and when you do push a rebase in §9A** (the one write this directive makes to the contributor's
-     branch), call `mcp__memtrace__fleet_record_episode` for the symbols the rebase touched
-     (`branch: "<PR base branch>"`, same scope rule as everywhere else in this directive) and read
-     the conflict class back: **A** (additive, no overlap) — proceed. **B** (touched-set overlap
-     with a peer's recent episode) — re-read the peer's work before continuing this PR's review.
-     **C** (destructive overlap) — do not push through; treat it as a HALT (this PR) per the
-     definition above, submit `mcp__memtrace__fleet_submit_verdict`, and poll
-     `mcp__memtrace__fleet_get_escalation({agent_id})` for `your_directive` (`wait` / `proceed` /
-     `defer` / `review`) before resuming this PR.
-2. Read `CONTEXT.md` directly but **not linearly** — it is a machine-greppable predicate fact-store (`CLASS.subkey=value`, one fact per line) at ~300 KB, so a linear read is ~200 K tokens of mostly-irrelevant predicates. Per `CLAUDE.md` → CODE DISCOVERY, `CONTEXT.md` is `grep` territory: read its heading structure, then grep the predicates governing the surfaces this PR touches (`RULESET.TESTS.*`, `RULESET.CONTRIB.*`, `RULESET.PR-SCOPE.*`, and any `DEFECT.*` in the diff's area). Never delegate it — `META.RULE.brief-must-cite-doc` needs verbatim IDs you read yourself. Read `CONTRIBUTING.md` sections "Pull Request Guidelines" + "CHANGELOG Entries" fresh. Precedence: `META.RULE.canonical-source-precedence=CONTRIBUTING.md > docs/adr/* > CONTEXT.md > agent memory`.
-3. Review related open issues to ensure alignment. Address overlaps.
-4. `gh pr view $PR --json author,title,body,labels,headRefName,headRefOid,baseRefName,mergeable` — confirm author is NOT in `OWNER_LOGINS`/`OWNER_NAMES`. If it is, HALT (this PR). Keep `headRefName` + `headRefOid`; §1.6b needs both.
-5. **Merge Conflict Gate:** **First apply the §1.8 staleness test** (no author activity since your last review/comment for more than `STALE_DAYS`): a stale PR is queued for closure and no new review is posted — a fresh review would restart the clock on an abandoned PR. Only then verify mergeable state (pre and post-rebase). If `CONFLICTING`, post a request-changes review (formal `--request-changes` with the §8.1 `### Memtrace Evidence` section — never a plain `--comment`) highlighting the exact conflicts for author resolution, then HALT (this PR). `BEHIND` with no conflict is NOT this gate (see the merge-queue rule under Phase B).
-6. **CI Status Gate — TWO checks, both required.**
-   **⚠️ `statusCheckRollup` / `gh pr checks` CANNOT see a run that never started.** GitHub gates fork and first-time-contributor `pull_request` workflows at `action_required` pending maintainer approval. Those runs are **absent from the rollup entirely** — not pending, not failing, just missing — so a PR whose whole test matrix is unapproved reports **all-green with exit 0**. (Verified on PR #2412: `gh pr checks` → 8 checks, all pass, exit 0, while `Tests`, `Security Scan`, `Docs Required`, `Changeset Required`, and `Validate Branch Name` all sat at `action_required` for that exact head SHA. This is what made a batch of PRs look green.)
-   - **6a. Rollup check** — `gh pr view $PR --json statusCheckRollup,mergeable,mergeStateStatus`. Any `FAILURE`/`ERROR` → post failure logs, request changes, HALT (this PR).
-     **⚠️ Deduplicate to latest-per-name before believing a `FAILURE`.** The rollup returns *every* check run for the SHA, including superseded ones, so a check that failed and was later re-run green appears **twice** — once red, once green — and the red entry is indistinguishable from a live failure. (Verified on PR #2436: four runs named `Pull request template format`, the two older ones `failure`, the newest `success`. Taking the rollup at face value would have requested changes on an already-fixed check.) Always collapse by name, newest `started_at` wins:
-     ```bash
-     gh api "repos/open-gsd/gsd-core/commits/$SHA/check-runs?per_page=100" --paginate \
-       --jq '.check_runs[]|[.name,(.conclusion//.status),.started_at]|@tsv' \
-     | sort -t$'\t' -k1,1 -k3,3r \
-     | awk -F'\t' '!seen[$1]++ && $2!="success" && $2!="skipped" {print $2"  "$1}'
-     ```
-     Empty output = genuinely green. Only a name whose *newest* run is non-success is a real failure.
-   - **6b. Pending-approval queue check** — never skip, even when 6a is fully green:
-     ```bash
-     gh pr view $PR --json headRefName,headRefOid -q '.headRefName + " " + .headRefOid'
-     # then, with BR=<headRefName> SHA=<headRefOid>:
-     gh api "repos/open-gsd/gsd-core/actions/runs?status=action_required&branch=$BR&per_page=100" \
-       | jq -r --arg sha "$SHA" '[.workflow_runs[] | select(.head_sha==$sha)] as $p
-           | "pending=\($p|length)", ($p[] | "  \(.id)\t\(.name)")'
-     ```
-     Two mechanics that bite: **scope by `head_sha`** — the branch filter alone returns every historical push's runs (45 on #2412 vs the 5 that are live), and **pipe to real `jq`** — `gh api --jq` rejects `--arg` (`accepts 1 arg(s), received 4`).
-   - **6c. Record the pending run IDs — do NOT release them here.** Releasing costs real CI minutes on a fork PR, and at precondition time you have no verdict to justify spending them: §1 runs *before* the substance review in §§3–7. Capture `pending`, the run IDs, and their names into the PR's Phase-A task, then continue the review. The release decision belongs to **§9**, after findings are known.
-     > This ordering is load-bearing. The earlier form of this step read "if the verdict is otherwise clean, approve the runs" — a verdict §1 cannot have. Following it literally means either releasing CI blind on every fork PR, or quietly deferring anyway with no step that owns the decision.
-   - **6d.** A PR whose tests never executed is **not approvable** and **not mergeable** under §8's zero-tolerance policy. "Rollup was green" is not evidence tests ran. `pending > 0` does **not** by itself justify request-changes either — it is a maintainer-side gate, not a contributor defect. Judge the substance on the diff, then let §9 decide the release.
-7. **Activity State:** Run the full follow-up sweep from `<follow_ups_and_questions>` first. If the last comment/review was yours AND the sweep finds no new commits, comments, review-thread replies, or unresolved questions from anyone else, skip this PR and HALT (this PR) — **but only when your last action is less than `STALE_DAYS` old; once `STALE_DAYS` have passed since your last review/comment with no author activity (no commits, comments, replies, submissions), §1.8 applies and the PR is queued for closure, never skipped.** Measure from your last real review/comment, not from a broadcast notice posted to every PR (e.g. the merge-queue heads-up). Any follow-up found is surfaced to the user with `AskUserQuestion` (paused) before the PR is judged.
-8. **Staleness Threshold:** If awaiting author action > `STALE_DAYS` (no author activity since your last review/comment), queue a close (per Batch write-action policy). Check §1.8 BEFORE deciding to skip under §1.7. Comment: *"Closing this PR as stale due to inactivity. We expect PRs to be followed up on within 5 days. Please feel free to reopen or submit a new PR when you have the bandwidth to continue this contribution."* Then HALT (this PR).
-9. Extract linked issue. Per `CI.GATE.issue-link-required` — if missing, post request-changes review and HALT (this PR).
-10. `gh issue view <N> --json labels,title,body,state,stateReason,closedByPullRequestsReferences` for classification.
-    - **10b. Closed-Issue Gate.** A PR whose linked issue is already `state: CLOSED` is reviewing work against a resolved target. The substantive review is wasted: the fix shipped, the labels reflect a decided outcome, and `Fixes #N`/`Closes #N` in the PR body is now an inert keyword that strands the PR open (nothing left to auto-close). Reject and close:
-      ```bash
-      STATE=$(gh issue view <N> --json state -q '.state')
-      # if STATE == CLOSED:
-      gh pr close $PR --comment "Closing: linked issue #<N> is already CLOSED (<stateReason>) — the work this PR targets has been resolved. A PR against a closed issue cannot be reviewed for fit or merged. If this is genuinely new coverage or a follow-up, please open a fresh issue describing the gap first, then re-open or file a new PR referencing it."
-      ```
-      Record the outcome as `closed-closed-issue` in the PR's task and HALT (this PR). **Two narrow exceptions** where a closed linked issue is acceptable and the PR proceeds to review:
-      1. **Test/docs-only PR** (`test(...)`, `docs(...)` conventional type) that adds regression coverage or documentation for the *already-shipped* fix, AND the PR body does **not** carry a closing keyword (`Fixes`/`Closes`/`Resolves #N`) against the closed issue. If it does carry the keyword, post a `--comment` (exempt from the §8.1 Memtrace gate) asking the author to drop it before proceeding — the misleading keyword is the finding, not a block — then HALT (this PR) until corrected.
-      2. **The PR explicitly supersedes/reopens** — body names the prior fix PR and states it was incomplete/incorrect, with evidence (e.g. the prior fix's test now fails). Verify the claim; if unfounded, close per above.
-      Use `--comment` (not `--request-changes`) for the close rationale and the keyword-drop note: these are direction/mechanical actions where a full graph pass is not warranted, and §8.1's `### Memtrace Evidence` requirement would otherwise block the post.
-11. Checkout latest `next`, then `gh pr checkout $PR` locally. Invoke `/memtrace-skills:memtrace-continuous-memory` (or call `mcp__memtrace__detect_changes` with the PR diff) so the graph reflects the checked-out PR head. Then, for every touched internal source file:
-	- `mcp__memtrace__preflight_check` — **call this first, per changed symbol.** One call returns blast radius, process-flow membership, co-change partners, complexity, 30-day churn, and a generated verification checklist, and surfaces governance/ADR/agent-rule guidance for the touched file when Cortex is active. It is the cheapest way to get most of what §1.11, §4A, and §4C each ask for separately, and the generated checklist is the thing to review the PR *against* — a contributor who did not do the listed verifications has an incomplete change, and that is a finding.
-	- `mcp__memtrace__get_symbol_context` — role, callers, callees, type references, community and process membership, cross-repo API callers of each changed symbol. Required by name in §8.1; do not substitute `preflight_check` for it.
-	- `mcp__memtrace__get_impact` — blast radius (affected symbols/files/processes, cross-repo callers, risk rating). Capture this for the review body. Required by name in §8.1.
-	- `mcp__memtrace__analyze_relationships` — only when the diff changes an interface, base class, export surface, or type. `get_symbol_context` gives the neighborhood; this gives the specific traversal (`class_hierarchy`, `overrides`, `imports`, `exporters`, `type_usages`) that tells you whether every implementer/consumer moved with the change.
-11b. **Risk-tier the PR before deciding how hard to review it.** Run `mcp__memtrace__find_central_symbols` (PageRank — transitive dependents) and `mcp__memtrace__find_bridge_symbols` (betweenness — architectural chokepoints) once per repo, and intersect the results with the PR's changed symbols. A diff touching a top-ranked central or bridge symbol earns maximum scrutiny regardless of line count; a high bridge score with low PageRank is the signature of an undocumented hidden dependency, which is precisely the class of change a diff-only reviewer waves through. Record the intersection — a one-line diff to a chokepoint and a 400-line diff to a leaf module are not the same review.
-12. **Publish this PR's fleet intent now that the touched set is known.** This is the step that
-    lets an issue-side `/bug-fixer` sweep see this PR is claimed:
-    `mcp__memtrace__fleet_publish_intent({ repo_id, agent_id: <you, from Phase A item 0>, branch:
-    "<PR base branch>", intent: {"bug_fix":{"defect":"logic_error"}}, assignment: "Working PR #$PR
-    (fixes #<N>): <PR title>", touched: [<symbols from item 11's preflight_check/get_impact>] })`.
-    **The `assignment` string MUST name the linked issue number** (`#<N>` from item 9) — the
-    issue-number string is the only thing an issue-side sweep can match against to know this issue
-    is being handled from the PR side; an assignment that names only the PR number is invisible to
-    it. **`branch` is the PR's base branch, never its head branch** — same scope rule as Phase A
-    item 0: a fork head branch is a private, empty pool that no peer agent will ever query.
-    Inspect the returned `active_conflicts`; a non-empty conflict on the touched set is itself a
-    finding for §8.
-
-### 2. Classify via linked-issue labels
-**[BLOCKING]**
-Cite verbatim:
-- `RULESET.CONTRIB.CLASSIFY.fix=requires confirmed/confirmed-bug before implementation`
-- `RULESET.CONTRIB.CLASSIFY.enhancement=requires approved-enhancement before implementation`
-- `RULESET.CONTRIB.CLASSIFY.feature=requires approved-feature before implementation`
-
-`confirmed-bug` → **Bug-Fix Track**. `approved-feature` / `approved-enhancement` → **Feature Track**. Missing label = gate violation. Ambiguous = halt and query user.
-
-**Recorded-decision check (both tracks):** run `mcp__memtrace__recall_decision({query})` (free-text over the Decision/Conversation lanes — the param is **`query`**, never `question`), then `mcp__memtrace__governing_rules({repo_id, file_path})` on each changed file (this is the reachable "what governs this code?" call), and `mcp__memtrace__verify_intent({decision_id})` / `mcp__memtrace__get_arc({decision_id})` on an id `recall_decision` actually returned. **`mcp__memtrace__why_is_this_here` and `mcp__memtrace__governing_contracts` take a Cortex `symbol_id` that no tool returns** — `find_symbol` / `find_code` / `get_symbol_context` yield `file_path` plus line spans, not a `symbol_id` — so do not aim them "at the changed symbols"; use `governing_rules` on the file instead, and reach for the pair only if a real numeric id is already in hand. If the change violates a recorded ban, convention, or prior decision (Cortex), that is a **Blocker** finding regardless of label.
-
-> **Read the verdict, not the absence of an error.** These five Cortex tools return a *deterministically-defended* verdict: `verify_intent` answers `Held`, `ViolatedAt`, or `CannotProve`; the rest answer `DeterministicallyDerived` or `CannotProve`. **`CannotProve` is a refusal, not a clean bill of health** — it means the decision is invisible to Cortex or has no implementing episode, which is exactly what an *undocumented* violation also looks like. Never write "no recorded decision governs this change" into the §8 evidence section on the strength of a `CannotProve`; write what the tool actually returned.
->
-> Cortex runs as a local sidecar. When it is missing, the five schemas **remain in `tools/list`** and calls return an explicit unavailable result — the core server keeps working, so nothing else in this directive breaks and the failure is easy to miss. An unavailable Cortex means the recorded-decision gate did not run; say so in the review rather than reporting it as passed.
-
-> `recall_decision` is **not optional** — it is one of the four tool names the §8 posting hook requires by name in the review body. Skipping it here means §8 cannot post. Note the hook only greps for the literal tool name (`require-memtrace-evidence.sh:67`), so a `CannotProve` or an unavailable-Cortex result will still satisfy the gate mechanically. The gate checks that you *named* the tool; only you can check that it *answered*.
-
-### 3A. Bug-Fix Track
-**[BLOCKING]**
-1. `/diagnose` — reproduce defect.
-2. `/root-cause-analysis` — identify true root cause. Compare against the PR. Compute blast radius with `mcp__memtrace__get_impact` and `/memtrace-skills:memtrace-change-impact-analysis`.
-   - **Prove the fix site is actually on the failing path.** `mcp__memtrace__find_dependency_path` between the reported entry point and the symbol the PR modifies returns the shortest call/dependency path, or nothing. **No path is a Blocker**: it means the diff cannot reach the reported symptom, which is the graph-level signature of a fix aimed at the wrong layer. Where the symptom names a flow rather than a function, `mcp__memtrace__list_processes` + `mcp__memtrace__get_process_flow` trace the ordered call chain and show which step the diff sits on.
-3. **Anti-paper-over gate:** Reject if the diff special-cases input, swallows errors, or touches presentation layers only. Fix must correct root cause.
-   - **Check whether this is the same fix again.** Run `mcp__memtrace__get_timeline` on each changed symbol (`scope_path` + `file_path`) for its full version history across every episode, with an AST hash per point that separates structural change from whitespace. A symbol repeatedly patched in the same region — or patched, reverted, and patched again — is evidence the earlier fixes treated symptoms. Pair with `mcp__memtrace__find_hotspots` (complexity × recent churn): the PR landing on an existing hotspot means the fix has to hold in code that is already where the next bug lives, and "it passes CI" is a weaker signal there.
-4. **Regression-test discipline:** Cite: `RULESET.TESTS.regression-must-fail-first=...`. Prove it: run the new test against the base branch (must FAIL), then against the PR branch (must PASS).
-5. `/qa-test-architect` — evaluate boundary and architectural quality.
-6. `/skills-from-the-artificer` — a real `Skill` call with `args` = one-sentence root cause + the changed files/symbols + `preset: bugfix-review`. Cite the returned `## Laws that apply` block in the review body; law names must come from the 24-law collection, not from recollection.
-7. `/code-review` — then run **the Deterministic Review Pass** (defined once below, under §3D). It is not optional and not a summary of `/code-review`; it is the graph-backed half that a diff-only reviewer structurally cannot produce.
-8. `/security-review`
-9. **Isolated adversarial pass:** spawn a fresh reviewer subagent that did NOT author any change, with no prior context, to re-review independently. (This is the Claude Code equivalent of `/codex:adverserial-review` and satisfies the "≥1 review in an isolated reviewer context" rule.)
-
-### 3B. Feature / Enhancement Track
-**[BLOCKING]**
-1. **ADR Gate:** Features require an ADR under `docs/adr/`. Enhancements require grep validation of existing ADRs. Verify the ADR actually governs the changed code with `mcp__memtrace__governing_rules({repo_id, file_path})` on the changed files — that call is keyed on a path, which is what you have — and `mcp__memtrace__get_arc({decision_id})` on an id `recall_decision` returned. (`governing_contracts` needs a Cortex `symbol_id` no tool returns; it is not usable here.)
-2. **Documentation Gate:** Evaluate docs against Diátaxis style (`/writing-documentation-with-diataxis`). Hard blocker if missing.
-3. **Functional validation:** Extract every promised feature into a checklist. Exercise each item on the PR branch. For any item described as a flow rather than a function, verify it structurally as well as behaviorally: `mcp__memtrace__list_processes` then `mcp__memtrace__get_process_flow` traces the named execution process from entry point through the full call chain, in order, with file/line and community per step. A feature that "works" in manual exercise but whose new code sits on no traced process — or that leaves the old path still wired as the reachable one — is a half-landed change, and the process trace is what makes that visible.
-4. `/qa-test-architect` — analyze coverage strategy (assert property-based or boundary coverage).
-5. `/security-review`
-6. **Isolated adversarial pass** (fresh subagent, as in 3A.9).
-7. `/code-review` — plus **the Deterministic Review Pass** (§3D), identical to the Bug-Fix track's §3A.7.
-8. `/rubber-duck` & `/skills-from-the-artificer` — walk through the implementation. Invoke `/codebase-design`, `/memtrace-skills:memtrace-change-impact-analysis`, and the Artificer Laws via a real `/skills-from-the-artificer` `Skill` call (`args` = the PR's one-sentence design + changed files/symbols + `preset: design-review`); cite its `## Laws that apply` block in the review body.
-
-### 3D. The Deterministic Review Pass (invoked by §3A.7 and §3B.7)
-**[BLOCKING]** *No LLM in this path — AST detectors, a 315-rule multi-language YAML pack, and cross-module graph checks, all local. Its findings are evidence, not opinion, and they land in §8 as such.*
-
-1. `mcp__memtrace__detect_changes` — scope the exact diff to affected symbols and their structural roles (community, process, blast radius). Run this first; the rest are diff-scoped and inherit its accuracy.
-2. `mcp__memtrace__find_cross_module_issues` (`diff`, `repo_root`, `repo_id`) — import-not-found, caller signature drift, stale call sites after a rename, **removed-symbol-still-referenced (Critical)**, interface method drift. **Check `_graph_state` on the response** per §0.3: zero issues alongside a staleness note is not a clean verdict.
-3. `mcp__memtrace__find_code_review_issues` — the combined surface (AST + YAML pack + cross-module) under one confidence/ranking policy. Required by name in §8.1. **Two defaults will silently under-report on a zero-tolerance review:**
-   - `review_mode` defaults to **`strict`**, which keeps only benchmark-safe high-precision findings. Pass **`review_mode: "online"`** — it adds evidence-gated repo-convention and invariant-drift candidates, which is the mode built for live review rather than for a precision leaderboard.
-   - `max_candidates` defaults to **20**. §8 is zero-tolerance down to nits, so a 20-item cap on a large diff hands you a truncated list that reads like a complete one. Raise it, and if you leave it capped, say so in the review body rather than implying the list is exhaustive.
-4. `mcp__memtrace__find_yaml_rule_matches` — run the rule pack **directly**, in addition to step 3. Step 3 ranks and filters; this returns the raw hits. The pack covers CSPRNG misuse, SQL string concatenation, disabled TLS verification, unsafe deserialization, ORM N+1, and sync I/O inside async across TS/JS, Python, Go, Java, Ruby, C#, Rust, Swift, Kotlin, and Lua — the exact classes §3A.8/§3B.5 `/security-review` is responsible for, arriving here as deterministic evidence instead of a judgment call. Each rule carries a `prod | test | any` context and Memtrace judges test-vs-prod with a real per-language AST walk, not a path guess — so a hit inside a fixture is genuinely scoped, and a `prod`-context hit in a file that merely lives under `tests/` is genuinely a hit.
-5. `mcp__memtrace__find_ast_review_issues` — **Python-only**; skip on a diff with no `.py` files rather than reporting it as clean.
-6. **`mcp__memtrace__review_github_pr` — the product review engine, as a second independent pass.** It runs the same local detectors under Memtrace's own ranking policy against the PR fetched from GitHub, and it ranked #1 on a 50-PR offline benchmark (3-judge mean F1 0.7268, ~20% ahead of the next tool). Because it ranks independently of your step-3 call, disagreement between the two is itself signal.
-   ```
-   mcp__memtrace__review_github_pr(
-     prUrl: "https://github.com/open-gsd/gsd-core/pull/<PR>",
-     post: false,          # MANDATORY — see below
-     repoRoot: "<abs path of the PR checkout>",
-     repoId: "<indexed repo id>",
-     graphMode: "strict",
-     reviewMode: "online",
-     minSeverity: "low",   # §8 is zero-tolerance; the "high" default hides nits
-     maxComments: 30
-   )
-   ```
-   - **`post: false` is non-negotiable in this directive.** §8 owns the single posted review, `require-memtrace-evidence.sh` gates its body, and §7 may yet close this PR as a competing loser. A second review posted by the Memtrace GitHub App would bypass the evidence gate, split the verdict across two authors, and survive the PR's closure. Fold its findings into the §8 body instead.
-   - **Preconditions, and how they fail.** `--pr`/`prUrl` mode needs a `memtrace auth login` session to mint a short-lived GitHub App installation token, and the Memtrace Code Reviewer App installed on `open-gsd/gsd-core`. Missing auth or a missing installation returns an explicit error — report it and fall back to steps 1–5, which never contact GitHub at all. **Do not treat a `review_github_pr` that could not run as a clean pass.**
-   - **It reads your working tree, not the PR head.** No clone or fetch of the PR branch happens: the engine reads the fetched diff plus the local checkout at `repoRoot`, and only *warns* when local HEAD differs from the PR's head SHA. §1.11 already left you on `gh pr checkout $PR`, which is what makes this correct — so if you ran this step from anywhere else, the result is against the wrong tree and must be discarded.
-   - Privacy boundary, for the record: source code is never sent to Memtrace SaaS. The hosted service acts purely as the GitHub App token broker; diff analysis, graph lookup, and ranking all run locally.
-
-### 4A. Test-quality compliance (both tracks)
-**[BLOCKING]**
-Violations are findings:
-- `RULESET.TESTS.no-source-grep=ESLint rule local/no-source-grep (eslint-rules/no-source-grep.cjs, wired in eslint.config.mjs, run by npm run lint and the CI "Lint — ESLint" step) rejects readFileSync of a source .cjs/.js/.ts path followed by .includes()/.match()/.startsWith()/.endsWith()/.indexOf()/.search(); CI hard-fail. Exemption: // allow-test-rule: <reason> with the #NNN on the SAME line` — **do not cite `scripts/lint-no-source-grep.cjs`; ADR-452 retired it and that path now fails `MODULE_NOT_FOUND`.**
-- `RULESET.TESTS.boundary-coverage=tests MUST exercise inputs at and near the threshold/limit, not only trivial-fit and trivial-overflow; pick inputs where N ∈ {limit-1, limit, limit+1}`
-- `RULESET.TESTS.no-timing-assertion=do not assert on wall-clock elapsed time; use clock-seam pattern with node:test mock.timers`
-- `RULESET.TESTS.property-based-testing=modules implementing parsing / transformation / budget-limit / bijective contracts must include at least one fast-check (fc) property test`
-- `RULESET.TESTS.delete-bad-tests=pass-always / vacuous-truth / source-grep / elapsed-time / real-race tests are DELETED and replaced with compliant tests in the same PR`
-- `RULESET.TESTS.mutation-score=Stryker runs incremental (--since origin/next); default threshold 80% killed/total; surviving mutants block merge`
-
-**Quality graph pass:** run `mcp__memtrace__find_dead_code` (zero-caller symbols the PR adds or leaves) and `mcp__memtrace__get_function_quality_metrics` / `mcp__memtrace__find_hotspots` on changed functions (complexity × churn). Zero-caller or critical-risk changed functions are findings.
-
-> **Two calibration facts, so these numbers are cited correctly in §8.**
-> - **`find_dead_code` is reachability, not grep.** Zero callers here accounts for every typed call edge Memtrace indexed — a far stronger claim than "no grep hits," and worth stating as such when you flag an addition as dead. It excludes exported symbols, process entry points, and test files by default; pass `include_tests: true` when the PR's dead-code risk is in the test surface itself.
-> - **Two different risk scales exist and they disagree on the same function.** `calculate_cyclomatic_complexity` bands on complexity alone (low ≤10, medium 11–20, high 21–50, critical >50). `get_function_quality_metrics` and `find_most_complex_functions` also weigh direct callers (critical at complexity >50 **or** callers >40; high at >20 or >15; medium at >10 or >5). Name the producing tool whenever you quote a risk level — "critical" from one is not "critical" from the other, and a §8 Blocker resting on an unattributed band is not defensible. Cognitive complexity (via `get_function_quality_metrics`) follows the SonarSource definition and penalizes nesting over raw branch count — it is the better number when the finding is "this is unreadable," while cyclomatic is the better number when the finding is "this is undertested."
-
-### 4B. CONTEXT.md standards conformance (both tracks)
-**[BLOCKING]**
-Grep `CONTEXT.md` for every predicate class the diff touches. Cite verbatim. Cross-check against recorded contracts with `mcp__memtrace__governing_rules({repo_id, file_path})` on the changed files — the path-keyed call, since `governing_contracts` requires a Cortex `symbol_id` that no tool returns. A convention violation the grep misses is still a finding (and per §2, a `CannotProve` means *unproven*, not *unconstrained*; an `unavailable` means the check never ran at all). No variable renames unless explicitly required by the linked issue.
-
-**Unwritten house style:** `CONTEXT.md` encodes the rules someone wrote down. `mcp__memtrace__get_style_fingerprint` measures the ones nobody did — empirical histograms of competing idioms (ternary vs if-else, arrow vs function declaration, `const` vs `let`, `await` vs `.then`, early return vs nested), with `dominant_idioms` as the load-bearing output. Pass `file_path` for a changed file and read `delta_from_codebase_norm`: a file that suddenly diverges from the repo norm is a contributor importing their own house style, which is exactly the drift that no lint rule catches and every reviewer argues about from memory.
-
-> **This tool is descriptive, not prescriptive** — it reports what the codebase does, not what it should. A style delta is a **Nit** you can now state with a number instead of a preference, and on its own it is never a Blocker. Ratios come back `null` below 20 observations on a dimension, which means the codebase has no norm there; do not manufacture a finding out of a `null`.
-
-### 4C. Completeness / co-change gate (both tracks)
-**[BLOCKING]** *Catches the missing half of a change.*
-For each changed file, run `mcp__memtrace__get_cochange_context` — same-commit coupling from history, which is behavioral where `get_impact` is structural, and therefore catches the missing half of a change that has no call edge to the changed code at all. (§1.11's `preflight_check` already returned co-change partners per symbol; this is the file-level sweep, and the two should agree — where they don't, the discrepancy is worth a look before you dismiss it.) Any file that historically co-changes with a changed file but is **absent from this diff** is a flagged finding — a candidate missing update. Priority suspects for this repo: `docs/INVENTORY.md` + manifest regen when `src/`, `references/`, or `workflows/` change; `CONTEXT.md` glossary on module changes; `.changeset/*` on user-facing diffs; a parallel surface when a shared constant/parser is edited (the "generative fix divergence" class).
-
-### 5. External-tool integration gate (both tracks)
-**[BLOCKING]**
-If the diff integrates any external tool/API:
-1. Research the interface (use Context7 via `mcp__context7` for library/SDK docs; for HTTP surface, `mcp__memtrace__get_api_topology` / `mcp__memtrace__find_api_calls` / `mcp__memtrace__find_api_endpoints`).
-2. Verify the PR follows the documented interface.
-3. Reject hacks.
-
-### 6. PR-format compliance (both tracks)
-**[BLOCKING]**
-Check `CONTRIBUTING.md`. Branch format, Conventional Commits, Changeset format, Docs mapping, Template fields, Scope.
-
-### 7. Competing PRs for the same issue
-**[BLOCKING]**
-`gh pr list --search "<issue-number> in:body" --state open`. Score each PR independently. Select the winner; queue the loser's close with rationale (per Batch write-action policy).
-
-Score on comparable evidence rather than on which diff reads better: for each candidate, the §1.11 `get_impact` risk rating and affected-symbol count, the §3D `find_code_review_issues` / `find_cross_module_issues` finding counts by severity, the §4C co-change completeness gaps, and whether the fix site sits on the failing path (§3A.2 `find_dependency_path`). A narrower blast radius that still reaches the root cause beats a broader one that does not. State the compared numbers in the loser's close rationale — "we picked the other PR" is not a reviewable reason.
-
-### 8. Compose and post the GitHub review
-**[BLOCKING]**
-**ZERO-TOLERANCE APPROVAL POLICY:** Minor issues are NOT approvable. Every issue (including nits) MUST be fully resolved. Merge conflicts immediately block approval.
-
-Structure: Summary → Classification & gate compliance → Functional checklist / Root-cause verdict → Blast radius (from `get_impact`) + risk tier (from §1.11b `find_central_symbols` / `find_bridge_symbols`) → Co-change completeness (from 4C) → **`### Memtrace Evidence`** → Findings by severity (Blocker/Major/Minor/Nit) → Verdict.
-
-Deterministic findings (§3D) and judgment findings (`/code-review`, `/security-review`, the isolated adversarial pass) both land in the severity list, but **attribute each one to its source**. A `find_cross_module_issues` removed-symbol-still-referenced is a fact about the graph and is not negotiable in review discussion; a style or design objection is a judgment the contributor may reasonably push back on. Merging the two into one undifferentiated list is how a hard finding gets argued away.
-
-Assemble the body by reading the `FILE:` paths returned by each spawned agent (per the Subagent Output Contract at the top of Phase B) — not from agent reply text.
-
-#### 8.1 `### Memtrace Evidence` is MACHINE-ENFORCED — the post is DENIED without it
-`.claude/hooks/require-memtrace-evidence.sh` is a PreToolUse Bash hook (wired in `.claude/settings.json`). It intercepts any command matching `gh pr review … --approve` or `--request-changes` and **denies the call** unless the body satisfies both:
-
-1. Contains the literal heading **`### Memtrace Evidence`** — exactly three `#`, exact capitalization.
-2. That section names **all four** required tools literally (`require-memtrace-evidence.sh:67`):
-   `get_impact` · `get_symbol_context` · `recall_decision` · `find_code_review_issues`
-
-Document the target and the finding for each. A heading with only three of the four is denied with *"missing evidence for these required tools"*.
-
-`gh pr review --comment` is **exempt** from this gate — use the comment form for direction/mechanical-block notes (red CI, rebase-needed, pending-approval CI) where a full graph pass isn't warranted.
-
-#### 8.2 Posting mechanics — `--body-file` must be a LITERAL, fully-expanded path
-The hook reads the body by `sed`-extracting the path from the **raw command text** (`.tool_input.command`), never from shell-expanded argv. Anything requiring the shell to expand is invisible to it and denies with the misleading *"No body found"*:
-
-- ✅ `--body-file /abs/path/review.md` — bare
-- ✅ `--body-file "/abs/path/review.md"` and `'/abs/path/review.md'` — quoted forms are handled (`require-memtrace-evidence.sh:47-49`, quoted patterns run first)
-- ❌ `--body-file "$BODY"` · `--body-file $(mktemp)` · `--body-file <(...)` — **never expand; always denied**
-
-Write the body to the scratchpad, then paste the resulting absolute path literally into the command text:
-
-```bash
-gh pr review 2412 --request-changes --body-file /abs/path/to/scratchpad/pr-2412-review.md
-```
-
-#### 8.3 The tentative-approve gate — CI must already be green before you post `--approve`
-If, after all of §§2–7, the finding list is genuinely empty (no Blocker/Major/Minor/Nit at all),
-the verdict is **tentatively** Approve — but **do not post it yet**. An empty finding list from
-static review, Memtrace, and the adversarial pass is not proof the commit builds and passes; it is
-proof the *code review* found nothing, which is a different and weaker claim (see the #4599
-incident above: a real defect existed that only the actual test run caught). Go to **§9** now:
-release any queued/pending CI for this exact head SHA and poll it to real completion. Only after
-that comes back either genuinely green, or red-but-proven-pure-base-drift (§9.4's attribution
-method, applied *before* you post anything), do you return here and post `--approve`. If the CI run
-surfaces a failure attributable to this PR's own diff, the tentative Approve is wrong: add that
-failure as a Blocker finding, rewrite the verdict as `changes-requested`, and post that instead —
-never post an approval for a commit whose CI you have not personally watched finish green.
-
-If the tentative verdict already carries any finding (i.e. it was never going to be an Approve),
-post the `changes-requested` review now, per the structure above. §9's CI release for that case
-happens ONLY when every finding is a Nit; with any Blocker/Major/Minor finding, CI stays queued
-(the fix push will trigger it, and releasing now would double the CI cost).
-
-Post-review status updates:
-1. Apply the appropriate GitHub label (`changes-requested` or `approved`).
-2. Clear outdated review-status labels.
-3. Apply the domain-area label.
-
-### 9. Release queued fork CI
-**[BLOCKING]** *Using the run IDs recorded in §1.6c. Skip entirely when `pending == 0`. Runs BEFORE
-posting per §8.3 when the tentative verdict is Approve; runs AFTER posting only when a
-`changes-requested` review carries Nit-only findings (any Blocker/Major/Minor withholds CI —
-see the §9.1 gate). Either way, this step is where "released"
-must become "confirmed complete" — never treat a release itself as a result.*
-
-GitHub holds `pull_request` workflows from forks and first-time contributors at `action_required` until a maintainer releases them. Releasing is **routine authorized maintainer work, not a decision to surface** — but it spends real CI minutes on someone else's branch, so it is gated on the review outcome rather than fired on arrival.
-
-1. **Gate.** Release only if §8's verdict carries **no findings above Nit** — i.e. no Blocker, no Major, no Minor. Nit-only findings do not block the release. **Any Blocker/Major/Minor finding withholds CI.** The contributor must push a fix for it regardless, and that push re-triggers the full matrix, so releasing now spends the CI cost twice (once on a diff already known to need changes, once on the fix). On any finding above Nit, say so plainly in the review ("CI runs left queued — release once the Blocker/Major/Minor findings are addressed") and stop here.
-2. **Release** each recorded run:
-   ```bash
-   gh api --method POST repos/open-gsd/gsd-core/actions/runs/<run_id>/approve
-   ```
-   Confirm the queue drained — re-run the §1.6b query and expect `pending=0`.
-3. **Poll to completion, then re-run §1.6a with the latest-per-name dedup.** A release is not a result. This is the step that converts "reported green because nothing ran" into an actual verdict, and it routinely changes the outcome.
-   > **Fleet TTL note:** intents expire after **120s** of no fleet calls. A CI poll loop here, or a
-   > long review/security pass elsewhere in Phase B, will outlast that — re-publish this PR's
-   > intent (`mcp__memtrace__fleet_publish_intent`, same `branch` as item 12) after each poll cycle
-   > rather than treating the expiry, or `fleet_status` reporting `0 active agents`, as evidence no
-   > peer is active.
-4. **Attribute whatever comes back red.** A failure surfaced by a release you triggered is frequently **not** the contributor's:
-   - Compare the failing test's file against the PR's changed-file list. No overlap is a strong signal of base drift.
-   - Check whether the base branch moved under the PR (a recent merge to `next` that deleted a fixture, changed a contract, or landed a new gate). **Do this with the graph, not by reading merge commits.** `mcp__memtrace__get_evolution` from the PR's branch point to now (`mode: "compound"` for the top changed files + rolled-up touched symbols) answers "what moved under this PR" directly, and Phase A.1b already computed the sweep-wide baseline to diff against. When one commit looks responsible, `mcp__memtrace__get_episode_replay` on it lists exactly which nodes and edges it added, modified, and **removed** — a deleted fixture or a removed symbol shows up as a removal, which is the fastest possible confirmation of a base defect. `mode: "graph_summary"` digests a chunky merge before you drill in.
-   - Read the assertion text before assigning blame; it usually names the mechanism. If it names a symbol, `mcp__memtrace__get_timeline` on that symbol shows whether it changed on the base since the PR forked — and its per-episode AST hash distinguishes a real structural change from a whitespace-only one, so you do not blame a reformat.
-   **When it is a base defect, the CI failure is not the contributor's — but that says NOTHING about whether their diff is sound. These are two independent verdicts and you must never let one stand in for the other.**
-
-   Read §8's verdict before writing a single word about the CI result, then use the matching form:
-
-   - **§8 found NO findings at all** → post a comment saying the diff is clean, quote the failure, name the cause, and state explicitly that no rebase or change is needed. Label `needs-review: ci/failing` rather than `review: changes requested`.
-   - **§8 found ANY finding (Blocker, Major, Minor, or Nit)** → the review verdict stands unchanged and `review: changes requested` stays. Say only the narrow, true thing: *"the red CI is base drift and not caused by your diff"* — then **restate the open findings in the same breath**. You may add `needs-review: ci/failing` alongside, never instead of, the review label.
-
-   **Three sentences you are FORBIDDEN to write, or to say to the maintainer, whenever §8 carries any finding:** "the diff is clean", "no change is needed", and "the remedy is a rebase" (or any paraphrase presenting a rebase, a CI re-run, or a release as *the* fix for the PR). A rebase can only ever be the remedy for **the CI failure**. Scope every such statement to the CI result explicitly — *"a rebase clears the red shard; the N findings below are separate and still stand"* — and never emit the CI attribution to the maintainer without the finding count attached to it. Reporting "#NNNN just needs a rebase" about a PR carrying Blockers is a **critical reporting failure**: it invites the maintainer to authorize a push and a CI spend on a diff you have already determined is wrong.
-
-   Escalate the base defect separately — but first confirm it is still open: a red that is already fixed on `next` is **not** an escalation, it is a stale branch, and the finding is "this PR is N commits behind", not "the base is broken". (Verified on PR #2436: substance clean, released 4 queued runs, and the resulting red was `tests/emitted-attribution.test.cjs` failing because a commit on `next` had deleted the golden fixtures it reads — a one-file test PR that could not possibly have caused it.)
-5. **Never leave a released PR unrecorded.** Update the Phase-A task with: released run IDs, final per-name CI state, and whether any red is attributable to the PR or the base.
-
-### 9B. Merge on approval — immediate, unconditional, not deferred to Phase C
-**[BLOCKING]** *Runs immediately after an `--approve` review is actually posted (which, per §8.3, only
-happens once CI for this head SHA has already been confirmed green or provably pure base-drift).
-This is not gated by `AUTONOMOUS` and is never batched — merge every Approved PR the moment it is
-approved, one at a time, before touching the next queued PR.*
-
-1. **Re-verify immediately before merging** — a few minutes may have passed since the CI check in
-   §8.3: `gh pr view $PR --json mergeable,mergeStateStatus,headRefOid`. If `headRefOid` changed (the
-   contributor pushed something new), the approval is stale — do NOT merge; re-run the affected part
-   of the review against the new head instead (treat it like a fresh pass over just the delta), and
-   only reach this step again once that's re-confirmed clean.
-
-   If `mergeStateStatus == BEHIND` (branch is stale relative to `next` but NOT `CONFLICTING` — a
-   currency problem, not a content problem): this is not a finding and not a reason to leave the PR
-   unmerged. Bring it up to date with the **server-side** update-branch call — it does not touch your
-   local worktree and does not route through this environment's local `git push` hooks (in
-   particular the `gsd-test-clean-tree-guard` pre-push gate that would block a *local*
-   force-push-based rebase):
-   ```bash
-   gh api --method PUT repos/open-gsd/gsd-core/pulls/$PR/update-branch
-   ```
-   This merges latest `next` into the PR branch and typically re-queues required checks (e.g.
-   `changeset-lint`, `docs-lint`, `Tests`) as `pending` on the new merge commit — that is CI actually
-   starting fresh, not a new blocker. Poll the rollup (§1.6a, deduped by name) until it settles and
-   confirm green — same completion-before-approval discipline as §8.3, just applied to the refreshed
-   SHA — then re-check `mergeable`/`mergeStateStatus` (expect `MERGEABLE`/`CLEAN`) before proceeding
-   to step 2. If it's `CONFLICTING` instead of merely `BEHIND`, that IS a real finding — stop, revert
-   the verdict to `changes-requested` describing the conflict, and do not force anything.
-2. **Merge:**
-   ```bash
-   gh pr merge $PR --repo open-gsd/gsd-core --squash --delete-branch
-   ```
-   (Use whatever merge method `CONTRIBUTING.md` documents as this repo's convention if it differs
-   from squash; do not guess — grep for it once per sweep, not per PR.)
-3. **Confirm the merge landed and `origin/next` is green before moving on:**
-   ```bash
-   git fetch origin next
-   gh pr view $PR --repo open-gsd/gsd-core --json state,mergedAt   # state == MERGED
-   ```
-   Then poll the resulting CI run on `next` for the new merge commit to actual completion. **Do not
-   pick "the most recent run" via `gh run list --limit 1` — a single push fans out into many
-   separate workflow runs (Docs Required, Validate Branch Name, Changeset Required, Default Flip
-   Documentation, ...) and several finish in seconds, so `--limit 1` can hand you one of those
-   instead of the real test matrix (this bit this exact sweep once, on PR #4529's post-update-branch
-   check).** Resolve the merge SHA and specifically find the run named `Tests`:
-   ```bash
-   SHA=$(git rev-parse origin/next)
-   gh api "repos/open-gsd/gsd-core/actions/runs?head_sha=$SHA&per_page=100" -q '.workflow_runs[] | "\(.id)\t\(.name)\t\(.status)"'
-   # watch the row whose name == "Tests":
-   gh run watch <that run's id> --repo open-gsd/gsd-core --exit-status
-   ```
-   **Do not advance to the next queued PR until this run's conclusion is known.**
-4. **If the post-merge `next` run comes back green:** record the outcome, advance to the next PR.
-5. **If the post-merge `next` run comes back red:** this is no longer a per-PR HALT — a red `next`
-   blocks every other contributor and every other PR still in this queue that will be diffed/rebased
-   against it. **Stop the entire sweep immediately** (do not start reviewing another PR), surface the
-   failure to the user in full (failing job, logs, the merge that likely caused it), and wait for
-   explicit direction before resuming. Do not attempt to revert the merge yourself unless
-   specifically asked to.
-
-### 9A. Push a rebase — only when the review found no blockers
-**[BLOCKING]** *Runs after §8 has posted, using the behind-by / rebases-cleanly finding recorded in §1.1. Skip entirely when the branch is not behind.*
-
-A rebase-push is **not** a neutral housekeeping act. It force-updates a contributor's branch, rewrites their history, and triggers their full CI matrix. It is therefore gated exactly like a CI release, on the same verdict, for the same reason.
-
-1. **Gate.** Push a rebase only if §8's verdict carries **no findings above Nit** (no Blocker/Major/Minor — a rebase-push re-triggers the contributor's CI, the same double-spend §9.1 prevents). On any such finding, **do not push it** — the contributor is going to push again anyway to fix the blocker, and their rebase will pick the base up for free. Instead, put the rebase instruction in the review body (`git fetch origin next && git rebase origin/next`) and state what it fixes. Rebasing a known-wrong diff spends a fork CI matrix to prove nothing and rewrites someone's branch under them while they are mid-fix.
-2. **Never present a rebase as progress toward merge.** It clears base-drift CI noise. It resolves no finding, retires no Blocker, and moves no PR closer to approval. Any summary that implies otherwise is wrong — see the forbidden sentences in §9.4.
-3. **Prefer asking over pushing.** The default is to tell the contributor to rebase. Push it yourself only when the verdict is clean AND the branch is behind AND `maintainer_can_modify` is true. When you do push, use `--force-with-lease` pinned to the exact sha you fetched, and verify afterwards that the changed-file set and the added/removed line set are unchanged.
-4. **A blocked push gate is a signal, not an obstacle.** If a machine gate refuses the push, stop and re-read your own §8 verdict before doing anything else. Do not request an override token, and never emit one on your own initiative — `CLAUDE.md` reserves it for an explicit human instruction **naming the token**, and general approval ("go ahead", "you have permission") is **not** that. A gate firing on a PR you have already called blocked is usually the system catching a mistake you are in the middle of making.
-
-> **Do not release CI to "see if it passes" as a substitute for reviewing the diff.** The review stands on its own; CI confirms it. A PR whose tests never ran is still not approvable (§6d), and a green matrix does not retire any finding from §8.
-
-Record the PR's outcome in its Phase-A task, then advance to the next queued PR.
+The nested per-PR **TaskCreate** (one task per row above that the PR reaches) is the ledger that each file was reached; a section task is not marked `completed` unless its file was read in full (in this context) while that task was `in_progress`.
 
 ---
 
