@@ -213,10 +213,20 @@ Some skills include an `evals/evals.json` file with prompts and expected behavio
 }
 ```
 
+## Skill authoring conventions
+
+Every `SKILL.md` here follows three rules (re-audited November 2026 against Anthropic's updated guidance for the Claude 5.5 models):
+
+1. **The first 100 lines carry the skill.** Trigger context, safety rules, "agent behavior" sections and the workflow outline come first, and a `SKILL.md` stays under 500 lines. Bulky detail (templates, long scripts, project-specific pitfalls, API catalogs) lives in `references/*.md`, linked from `SKILL.md` with a sentence saying when to read it, and every reference file longer than about 100 lines opens with a `## Contents` list so the model can jump to a section instead of reading the file whole.
+2. **Match prescriptiveness to the step.** Low freedom (exact commands, required output shapes, hard rules) where a mistake is expensive or irreversible: uploads, deletes, merges, money, accessibility requirements, evidence gates. Medium freedom (a goal plus boundaries or a template) for most workflow steps. High freedom for synthesis and judgment. A rule earns a MUST only when it closes a named failure; otherwise state the goal and let the model pick the method.
+3. **Multi-step workflows carry a progress checklist and a feedback loop.** A `- [ ]` list near the top names each step and what proves it done, and any step with a validator says "fix what it found, then run it again" instead of running once.
+
+The law and principle skills (about 60 lines each) are reference lenses rather than workflows and only need rule 1.
+
 ## Contributing a skill
 
 1. Create a top-level directory named after the skill (kebab-case).
-2. Drop in a `SKILL.md` with the frontmatter `name:` and `description:` fields, followed by the body Claude should read.
+2. Drop in a `SKILL.md` with the frontmatter `name:` and `description:` fields, followed by the body Claude should read, laid out per the authoring conventions above.
 3. Optionally add `evals/evals.json` with trigger prompts and expected behaviors.
 4. Optionally add a per-skill `README.md` documenting anything unusual about the install (e.g. companion agents).
 5. PR.

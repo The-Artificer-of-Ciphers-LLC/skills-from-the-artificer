@@ -4,6 +4,17 @@ Source pages (all https://diataxis.fr): /tutorials/, /how-to-guides/, /reference
 
 Contents: Tutorials · How-to guides · Reference · Explanation · Tutorial vs how-to · Checklists
 
+## Contents
+
+- [Tutorials  (/tutorials/)](#tutorials-tutorials)
+- [How-to guides  (/how-to-guides/)](#how-to-guides-how-to-guides)
+- [Reference  (/reference/)](#reference-reference)
+- [Explanation  (/explanation/)](#explanation-explanation)
+- [Tutorial vs how-to  (/tutorials-how-to/)](#tutorial-vs-how-to-tutorials-how-to)
+- [Reference vs explanation  (/reference-explanation/)](#reference-vs-explanation-reference-explanation)
+- [The four types at a glance  (/map/)](#the-four-types-at-a-glance-map)
+- [Checklists](#checklists)
+
 ## Tutorials  (/tutorials/)
 
 A tutorial is "an experience that takes place under the guidance of a tutor" and is "always learning-oriented". Its purpose "is not to help the user get something done, but to help them learn." The learner learns by doing; what they do is not necessarily what they learn.

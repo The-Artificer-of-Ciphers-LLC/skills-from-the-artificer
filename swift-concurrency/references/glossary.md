@@ -9,6 +9,40 @@ Skip this file if:
 
 - You need implementation patterns, not definitions. Use the relevant reference file instead.
 
+## Contents
+
+- [Actor isolation](#actor-isolation)
+- [Global actor](#global-actor)
+- [Default actor isolation](#default-actor-isolation)
+- [Strict concurrency checking](#strict-concurrency-checking)
+- [Sendable](#sendable)
+- [@Sendable](#sendable)
+- [Suspension point](#suspension-point)
+- [Reentrancy (actors)](#reentrancy-actors)
+- [nonisolated](#nonisolated)
+- [nonisolated(nonsending) (Swift 6.2+ behavior)](#nonisolatednonsending-swift-62-behavior)
+- [@concurrent (Swift 6.2+ behavior)](#concurrent-swift-62-behavior)
+- [@preconcurrency](#preconcurrency)
+- [Region-based isolation / sending](#region-based-isolation-sending)
+- [AsyncSequence](#asyncsequence)
+- [AsyncStream](#asyncstream)
+- [Continuation](#continuation)
+- [Task Local](#task-local)
+- [Cooperative thread pool](#cooperative-thread-pool)
+- [Executor](#executor)
+- [Structured concurrency](#structured-concurrency)
+- [Isolation domain](#isolation-domain)
+- [Task priority](#task-priority)
+- [Cancellation](#cancellation)
+- [Debounce](#debounce)
+- [Throttle](#throttle)
+- [Merge (AsyncAlgorithms)](#merge-asyncalgorithms)
+- [CombineLatest (AsyncAlgorithms)](#combinelatest-asyncalgorithms)
+- [Zip (AsyncAlgorithms)](#zip-asyncalgorithms)
+- [AsyncChannel](#asyncchannel)
+- [AsyncThrowingChannel](#asyncthrowingchannel)
+- [AsyncTimerSequence](#asynctimersequence)
+
 ## Actor isolation
 
 A rule enforced by the compiler: actor-isolated state can only be accessed from the actor's executor. Cross-actor access requires `await`.

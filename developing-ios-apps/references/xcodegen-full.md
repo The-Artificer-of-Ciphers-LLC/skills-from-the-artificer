@@ -1,5 +1,12 @@
 # XcodeGen Complete Reference
 
+## Contents
+
+- [Full project.yml Structure](#full-projectyml-structure)
+- [Target Types](#target-types)
+- [Build Settings Reference](#build-settings-reference)
+- [Info.plist Keys](#infoplist-keys)
+
 ## Full project.yml Structure
 
 ```yaml

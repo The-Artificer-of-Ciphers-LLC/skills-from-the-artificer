@@ -1,5 +1,17 @@
 # Traits and Tags
 
+## Contents
+
+- [When to use this reference](#when-to-use-this-reference)
+- [Trait categories](#trait-categories)
+- [Basic trait examples](#basic-trait-examples)
+- [Conditions and disabling](#conditions-and-disabling)
+- [Availability](#availability)
+- [Tags](#tags)
+- [Inheritance and scope](#inheritance-and-scope)
+- [Do / Don't](#do-dont)
+- [Review checklist](#review-checklist)
+
 ## When to use this reference
 
 Use this file when controlling test execution behavior, linking bug context, and organizing large test suites for targeted runs and CI filtering.

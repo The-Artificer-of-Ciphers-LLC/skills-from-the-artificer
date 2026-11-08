@@ -23,6 +23,19 @@ Use this skill to pull English (or any source locale) App Store metadata, transl
 - Know your app ID (`asc apps list` to find it)
 - At least one locale (typically en-US) already has metadata in App Store Connect
 
+## Agent Behavior
+
+1. **Always start by reading the source locale** — never translate from memory or assumptions.
+2. **Check existing localizations first** — don't overwrite existing translations unless the user asks to update them.
+3. **Version vs app-info is different** — version fields live under `--version "VERSION_ID"`; subtitle/name/privacy live under `--app ... --type app-info`.
+4. **Prefer deterministic IDs** — do not select IDs via `head -1` unless explicitly requested; use `--output table` for selection or `asc-id-resolver`.
+5. **Validate character limits** before uploading. Count characters for each field. If over limit, re-translate shorter.
+6. **Keywords are special** — do not literally translate. Research locale-appropriate search terms. Think like a user searching the App Store in that language.
+7. **Show the user translations before uploading** — present a summary table of all fields × locales for approval. Do not push without confirmation.
+8. **Process one locale at a time** if translating many languages — easier to review and catch errors.
+9. **If upload fails** for a locale, log the error, continue with other locales, report all failures at the end.
+10. **For updates to existing localizations** — download current, show diff of what will change, get approval, then upload.
+
 ## Supported Locales
 
 App Store Connect locales for version and app-info localizations:
@@ -40,6 +53,19 @@ Fields: `description`, `keywords`, `whatsNew`, `supportUrl`, `marketingUrl`, `pr
 
 ### App Info Localizations (app-level, persistent)
 Fields: `name`, `subtitle`, `privacyPolicyUrl`, `privacyChoicesUrl`, `privacyPolicyText`
+
+## Character Limits (enforce before upload!)
+
+| Field | Limit |
+|-------|-------|
+| Name | 30 |
+| Subtitle | 30 |
+| Keywords | 100 (comma-separated) |
+| Description | 4000 |
+| What's New | 4000 |
+| Promotional Text | 170 |
+
+**Always validate** translated text fits within limits before uploading. Truncated text looks unprofessional. If translation exceeds the limit, shorten it — do not truncate mid-sentence.
 
 ## Workflow
 
@@ -196,19 +222,6 @@ asc localizations list --version "VERSION_ID" --output table
 asc localizations list --app "APP_ID" --type app-info --app-info "APP_INFO_ID" --output table
 ```
 
-## Character Limits (enforce before upload!)
-
-| Field | Limit |
-|-------|-------|
-| Name | 30 |
-| Subtitle | 30 |
-| Keywords | 100 (comma-separated) |
-| Description | 4000 |
-| What's New | 4000 |
-| Promotional Text | 170 |
-
-**Always validate** translated text fits within limits before uploading. Truncated text looks unprofessional. If translation exceeds the limit, shorten it — do not truncate mid-sentence.
-
 ## Full Example: Add nl-NL and ru to Roxy Math
 
 ```bash
@@ -241,19 +254,6 @@ asc localizations upload --app "$APP_ID" --type app-info --app-info "$APP_INFO_I
 asc localizations list --version "$VERSION_ID" --output table
 asc localizations list --app "$APP_ID" --type app-info --app-info "$APP_INFO_ID" --output table
 ```
-
-## Agent Behavior
-
-1. **Always start by reading the source locale** — never translate from memory or assumptions.
-2. **Check existing localizations first** — don't overwrite existing translations unless the user asks to update them.
-3. **Version vs app-info is different** — version fields live under `--version "VERSION_ID"`; subtitle/name/privacy live under `--app ... --type app-info`.
-4. **Prefer deterministic IDs** — do not select IDs via `head -1` unless explicitly requested; use `--output table` for selection or `asc-id-resolver`.
-5. **Validate character limits** before uploading. Count characters for each field. If over limit, re-translate shorter.
-6. **Keywords are special** — do not literally translate. Research locale-appropriate search terms. Think like a user searching the App Store in that language.
-7. **Show the user translations before uploading** — present a summary table of all fields × locales for approval. Do not push without confirmation.
-8. **Process one locale at a time** if translating many languages — easier to review and catch errors.
-9. **If upload fails** for a locale, log the error, continue with other locales, report all failures at the end.
-10. **For updates to existing localizations** — download current, show diff of what will change, get approval, then upload.
 
 ## Notes
 - Version localizations are tied to a specific version. Create the version first if it doesn't exist.

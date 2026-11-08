@@ -1,5 +1,17 @@
 # Migration from XCTest
 
+## Contents
+
+- [When to use this reference](#when-to-use-this-reference)
+- [Coexistence strategy](#coexistence-strategy)
+- [Practical migration order](#practical-migration-order)
+- [Example conversion: class method -> Swift Testing function](#example-conversion-class-method---swift-testing-function)
+- [Assertion mapping highlights](#assertion-mapping-highlights)
+- [Suite model differences](#suite-model-differences)
+- [Async migration specifics](#async-migration-specifics)
+- [Migration hygiene](#migration-hygiene)
+- [Common pitfalls](#common-pitfalls)
+
 ## When to use this reference
 
 Use this file for incremental migration of existing XCTest code to Swift Testing while preserving safety and CI signal.

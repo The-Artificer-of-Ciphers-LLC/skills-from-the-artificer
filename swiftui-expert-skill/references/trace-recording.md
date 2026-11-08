@@ -11,6 +11,14 @@ The bundled `scripts/record_trace.py` wraps `xctrace record` with:
 - JSON discovery for devices and templates.
 - Normal Python exit codes so an agent can orchestrate.
 
+## Contents
+
+- [Typical flows](#typical-flows)
+- [Discovery helpers](#discovery-helpers)
+- [Picking a template](#picking-a-template)
+- [Chaining into analysis](#chaining-into-analysis)
+- [Failure modes to handle](#failure-modes-to-handle)
+
 ## Typical flows
 
 ### A) Attach to a running app on a connected device

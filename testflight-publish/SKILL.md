@@ -14,6 +14,15 @@ Chains the TestFlight pipeline into one flow: verify app state, prepare What to 
 
 This skill contains no credentials or app identifiers. Everything app-specific comes from your environment or project config.
 
+## Progress checklist
+
+- [ ] Configuration present (`ASC_*`, `BUNDLE_ID`); nothing guessed or searched for on disk
+- [ ] Phase 1: app resolved, beta groups listed, build number above the last upload, pre-flight checks pass
+- [ ] Phase 2: What to Test notes approved by the user
+- [ ] Phase 3: archive and upload succeeded; build number bumped and committed only after success
+- [ ] Phase 4: build VALID, notes set, groups assigned, result verified
+- [ ] Phase 5: summary reported
+
 ## Configuration (do this once)
 
 Set these as environment variables (shell profile, CI secret store, or a git-ignored `.env`). Never commit them and never paste them into chat or notes.

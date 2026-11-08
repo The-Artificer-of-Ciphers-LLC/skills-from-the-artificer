@@ -17,6 +17,18 @@ Check whether the user is still providing diagnostic input. If they are pasting 
 
 Treating a single fix commit as final while the user is mid-paste on crash logs is a common failure: more fixes usually follow, and anything shipped in between is built on a provisional diagnosis.
 
+## Progress checklist
+
+- [ ] Precondition: the user has stopped supplying diagnostic input
+- [ ] Step 1: blast radius written as a file:line list (callers, callees, shared state)
+- [ ] Step 2: every blast-radius path checked (data integrity, threading, persistence and sync, control flow)
+- [ ] Step 3: adjacent user flows enumerated and traced; state pollution checked
+- [ ] Step 3.5: deletion verification (only if more than ~50 lines of view or feature code were deleted)
+- [ ] Step 4: zero-warning build on every target platform; impacted and adjacent suites run
+- [ ] Step 5: report written with a CLEAN or BLOCKED verdict
+- [ ] Step 6: any secondary issue fixed, then this trace re-run until CLEAN
+- [ ] Step 7: `debug-test-capture` run
+
 ## The Second Trace
 
 ### Step 1: Map the blast radius

@@ -12,6 +12,19 @@ Use this skill to bulk-create or bulk-update display names (and descriptions) fo
 - Know your app ID (`ASC_APP_ID` or `--app`).
 - Subscription groups and subscriptions already exist.
 
+## Agent Behavior
+
+- Always list existing localizations first to avoid duplicate creation errors.
+- Skip locales that already have a localization; only create missing ones.
+- When the user provides a single display name, use it for all locales (same name everywhere).
+- When the user provides translated names per locale, use the locale-specific name for each.
+- If a description is provided, pass `--description` on create. Otherwise omit it.
+- Use `--output table` for verification steps so the user can visually confirm.
+- Use default JSON output for intermediate automation steps.
+- After bulk creation, always run the list command to verify completeness.
+- For apps with many subscriptions, process them sequentially per group to keep output readable.
+- If a create call fails for a locale, log the locale and error, then continue with the remaining locales. After the batch completes, report all failures together so the user can address them.
+
 ## Supported App Store Locales
 
 These are the locales supported by App Store Connect for subscription and IAP localizations:
@@ -54,49 +67,18 @@ asc subscriptions localizations create \
   --name "Display Name"
 ```
 
-For example, to set "Monthly Pro" across all locales:
+For example, to set "Monthly Pro" on every locale that is still missing. Remove from the list any
+locale that already appeared in step 2, then run one loop instead of 38 hand-typed commands:
 
 ```bash
-# One command per locale (skip any that already exist)
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "ar-SA" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "ca" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "cs" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "da" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "de-DE" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "el" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "en-AU" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "en-CA" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "en-GB" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "es-ES" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "es-MX" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "fi" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "fr-CA" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "fr-FR" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "he" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "hi" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "hr" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "hu" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "id" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "it" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "ja" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "ko" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "ms" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "nl-NL" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "no" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "pl" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "pt-BR" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "pt-PT" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "ro" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "ru" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "sk" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "sv" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "th" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "tr" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "uk" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "vi" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "zh-Hans" --name "Monthly Pro"
-asc subscriptions localizations create --subscription-id "SUB_ID" --locale "zh-Hant" --name "Monthly Pro"
+for LOCALE in ar-SA ca cs da de-DE el en-AU en-CA en-GB en-US es-ES es-MX fi fr-CA fr-FR he hi hr hu id it \
+              ja ko ms nl-NL no pl pt-BR pt-PT ro ru sk sv th tr uk vi zh-Hans zh-Hant; do
+  asc subscriptions localizations create --subscription-id "SUB_ID" --locale "$LOCALE" --name "Monthly Pro" \
+    || echo "FAILED: $LOCALE"
+done
 ```
+
+A failed locale is reported and the loop continues; collect the `FAILED:` lines for the final report.
 
 ### 4. Verify
 
@@ -218,19 +200,6 @@ asc subscriptions list --group "GROUP_ID" --paginate
 # 4. For each subscription, localize it
 #    (repeat subscription localization workflow above)
 ```
-
-## Agent Behavior
-
-- Always list existing localizations first to avoid duplicate creation errors.
-- Skip locales that already have a localization; only create missing ones.
-- When the user provides a single display name, use it for all locales (same name everywhere).
-- When the user provides translated names per locale, use the locale-specific name for each.
-- If a description is provided, pass `--description` on create. Otherwise omit it.
-- Use `--output table` for verification steps so the user can visually confirm.
-- Use default JSON output for intermediate automation steps.
-- After bulk creation, always run the list command to verify completeness.
-- For apps with many subscriptions, process them sequentially per group to keep output readable.
-- If a create call fails for a locale, log the locale and error, then continue with the remaining locales. After the batch completes, report all failures together so the user can address them.
 
 ## Notes
 - Subscription display names are what users see on the subscription management sheet and in purchase dialogs.

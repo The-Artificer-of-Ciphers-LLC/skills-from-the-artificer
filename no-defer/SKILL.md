@@ -39,8 +39,8 @@ This means:
 
 Sometimes you legitimately can't finish something — you need a decision, an API key, access to something you don't have. That's different from deferring. Handle it like this:
 
-1. **Spawn a planner agent** to research the question and propose an answer
-2. **If the planner can resolve it**, proceed with the resolution
+1. **Research the question** (yourself, or via a planner agent if it is sizeable) and propose an answer
+2. **If that resolves it**, proceed with the resolution
 3. **If it truly requires user input**, note the specific blocker, finish everything else, and list only the genuinely blocked items with exactly what's needed to unblock them
 4. **Never stop early** just because one item is blocked — do everything else first
 

@@ -18,6 +18,26 @@ Master iOS Human Interface Guidelines (HIG) and SwiftUI patterns to build polish
 - Implementing iOS-specific gestures and interactions
 - Designing for Dynamic Type and Dark Mode
 
+## Best Practices
+
+1. **Use Semantic Colors**: Always use `.primary`, `.secondary`, `.background` for automatic light/dark mode support
+2. **Embrace SF Symbols**: Use system symbols for consistency and automatic accessibility
+3. **Support Dynamic Type**: Use semantic fonts (`.body`, `.headline`) instead of fixed sizes
+4. **Add Accessibility**: Include `.accessibilityLabel()` and `.accessibilityHint()` modifiers
+5. **Use Safe Areas**: Respect `safeAreaInset` and avoid hardcoded padding at screen edges
+6. **Implement State Restoration**: Use `@SceneStorage` for preserving user state
+7. **Support iPad Multitasking**: Design for split view and slide over
+8. **Test on Device**: Simulator doesn't capture full haptic and performance experience
+
+## Common Issues
+
+- **Layout Breaking**: Use `.fixedSize()` sparingly; prefer flexible layouts
+- **Performance Issues**: Use `LazyVStack`/`LazyHStack` for long scrolling lists
+- **Navigation Bugs**: Ensure `NavigationLink` values are `Hashable`
+- **Dark Mode Problems**: Avoid hardcoded colors; use semantic or asset catalog colors
+- **Accessibility Failures**: Test with VoiceOver enabled
+- **Memory Leaks**: Watch for strong reference cycles in closures
+
 ## Core Concepts
 
 ### 1. Human Interface Guidelines Principles
@@ -238,25 +258,13 @@ struct FeatureCard: View {
 }
 ```
 
-## Best Practices
+## References
 
-1. **Use Semantic Colors**: Always use `.primary`, `.secondary`, `.background` for automatic light/dark mode support
-2. **Embrace SF Symbols**: Use system symbols for consistency and automatic accessibility
-3. **Support Dynamic Type**: Use semantic fonts (`.body`, `.headline`) instead of fixed sizes
-4. **Add Accessibility**: Include `.accessibilityLabel()` and `.accessibilityHint()` modifiers
-5. **Use Safe Areas**: Respect `safeAreaInset` and avoid hardcoded padding at screen edges
-6. **Implement State Restoration**: Use `@SceneStorage` for preserving user state
-7. **Support iPad Multitasking**: Design for split view and slide over
-8. **Test on Device**: Simulator doesn't capture full haptic and performance experience
+Longer pattern catalogs, each opening with a contents list; read only the section you need:
 
-## Common Issues
-
-- **Layout Breaking**: Use `.fixedSize()` sparingly; prefer flexible layouts
-- **Performance Issues**: Use `LazyVStack`/`LazyHStack` for long scrolling lists
-- **Navigation Bugs**: Ensure `NavigationLink` values are `Hashable`
-- **Dark Mode Problems**: Avoid hardcoded colors; use semantic or asset catalog colors
-- **Accessibility Failures**: Test with VoiceOver enabled
-- **Memory Leaks**: Watch for strong reference cycles in closures
+- [`references/hig-patterns.md`](references/hig-patterns.md): layout and spacing, typography, color, navigation, toolbars, feedback, accessibility, error UI
+- [`references/ios-navigation.md`](references/ios-navigation.md): NavigationStack, NavigationSplitView, sheets, tabs, deep linking, coordinator pattern, iOS 18 transitions
+- [`references/swiftui-components.md`](references/swiftui-components.md): lists, forms, buttons, sheets, loading states, async content, animations, gestures
 
 ## Resources
 
