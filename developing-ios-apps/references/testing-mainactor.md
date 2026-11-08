@@ -1,5 +1,14 @@
 # Testing @MainActor Classes
 
+## Contents
+
+- [The Problem](#the-problem)
+- [Solution: setStateForTesting Pattern](#solution-setstatefortesting-pattern)
+- [Test Class Structure](#test-class-structure)
+- [State Machine Testing Patterns](#state-machine-testing-patterns)
+- [Why This Pattern Works](#why-this-pattern-works)
+- [Alternative: Internal Setter](#alternative-internal-setter)
+
 ## The Problem
 
 Testing `@MainActor` classes like `ObservableObject` controllers in Swift 6 is challenging because:

@@ -1,5 +1,16 @@
 # Fundamentals
 
+## Contents
+
+- [When to use this reference](#when-to-use-this-reference)
+- [Building blocks](#building-blocks)
+- [Core examples](#core-examples)
+- [Recommended defaults](#recommended-defaults)
+- [Organization guidance](#organization-guidance)
+- [Suite constraints to enforce](#suite-constraints-to-enforce)
+- [Do / Don't](#do-dont)
+- [Review checklist](#review-checklist)
+
 ## When to use this reference
 
 Use this file when creating new Swift Testing suites or refactoring test structure before deeper topics like traits, parameterization, or migration.

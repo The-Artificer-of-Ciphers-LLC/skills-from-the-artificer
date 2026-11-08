@@ -6,6 +6,13 @@ Every dispatch MUST set `model:` explicitly unless the chosen `subagent_type` pi
 
 ---
 
+## Contents
+
+- [Scout brief (haiku-scout)](#scout-brief-haiku-scout)
+- [Coder brief (sonnet-coder)](#coder-brief-sonnet-coder)
+- [Architect brief (stay in opus, or dispatch for second opinion)](#architect-brief-stay-in-opus-or-dispatch-for-second-opinion)
+- [Anti-templates (what NOT to write)](#anti-templates-what-not-to-write)
+
 ## Scout brief (haiku-scout)
 
 ```

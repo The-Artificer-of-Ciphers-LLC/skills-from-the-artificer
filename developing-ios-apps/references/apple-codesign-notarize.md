@@ -4,6 +4,19 @@ For macOS desktop apps (Electron or native) distributed outside the App Store. W
 
 ---
 
+## Contents
+
+- [Prerequisites](#prerequisites)
+- [Step 1: Create Developer ID Application Certificate](#step-1-create-developer-id-application-certificate)
+- [Step 2: Export P12 (for CI)](#step-2-export-p12-for-ci)
+- [Step 3: Create App Store Connect API Key (for notarization)](#step-3-create-app-store-connect-api-key-for-notarization)
+- [Step 4: Configure GitHub Secrets](#step-4-configure-github-secrets)
+- [Step 5: Electron Forge Configuration](#step-5-electron-forge-configuration)
+- [Step 6: GitHub Actions Workflow](#step-6-github-actions-workflow)
+- [Fail-Fast Three-Layer Defense](#fail-fast-three-layer-defense)
+- [Troubleshooting](#troubleshooting)
+- [Local Verification (without notarization)](#local-verification-without-notarization)
+
 ## Prerequisites
 
 - Apple Developer Program ($99/year)

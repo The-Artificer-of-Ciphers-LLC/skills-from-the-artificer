@@ -1,5 +1,18 @@
 # Parameterized Testing
 
+## Contents
+
+- [When to use this reference](#when-to-use-this-reference)
+- [When to parameterize](#when-to-parameterize)
+- [Single input collection](#single-input-collection)
+- [Multiple inputs](#multiple-inputs)
+- [`zip` for paired scenarios](#zip-for-paired-scenarios)
+- [Paired input alternatives](#paired-input-alternatives)
+- [Naming and output quality](#naming-and-output-quality)
+- [When `CaseIterable.allCases` is appropriate](#when-caseiterableallcases-is-appropriate)
+- [Common pitfalls](#common-pitfalls)
+- [Review checklist](#review-checklist)
+
 ## When to use this reference
 
 Use this file when you have repeated tests with identical logic and only input changes.

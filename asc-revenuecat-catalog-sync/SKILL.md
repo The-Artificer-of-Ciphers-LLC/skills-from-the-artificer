@@ -23,11 +23,12 @@ Use this skill to keep App Store Connect (ASC) and RevenueCat aligned, including
   - target RevenueCat app type (`app_store` or `mac_app_store`) and bundle ID for create flows
 - Use a write-enabled RevenueCat API v2 key when applying changes.
 
-## Safety defaults
-- Start in **audit mode** (read-only).
-- Require explicit confirmation before writes.
-- Never delete resources in this workflow.
-- Continue on per-item failures and report all failures at the end.
+## Safety defaults and agent behavior
+- Start in **audit mode** (read-only), and run the audit first even when apply mode was requested.
+- Ask for explicit confirmation before any create or update; never delete resources in this workflow.
+- Match by `store_identifier` first; never use display names as identifiers.
+- Use full pagination (`--paginate` for ASC, `starting_after` for RevenueCat tools).
+- Continue past per-item failures and report every failure together at the end.
 
 ## Canonical identifiers
 - Primary cross-system key: ASC `productId` == RevenueCat `store_identifier`.
@@ -51,11 +52,11 @@ Use this skill to keep App Store Connect (ASC) and RevenueCat aligned, including
 
 ### 2) Apply mode (explicit)
 Execute approved actions in this order:
-1. Ensure ASC groups/subscriptions/IAP exist.
-2. Ensure RevenueCat app/products exist.
-3. Ensure entitlements and product attachments.
-4. Ensure offerings/packages and package attachments.
-5. Verify and print a final reconciliation summary.
+- [ ] 1. Ensure ASC groups/subscriptions/IAP exist.
+- [ ] 2. Ensure RevenueCat app/products exist.
+- [ ] 3. Ensure entitlements and product attachments.
+- [ ] 4. Ensure offerings/packages and package attachments.
+- [ ] 5. Verify and print a final reconciliation summary.
 
 ## Step-by-step workflow
 
@@ -171,14 +172,6 @@ Attachments: entitlement_products=3 package_products=2
 Failures:
 - com.example.premium.annual: duplicate store_identifier exists on another RC app
 ```
-
-## Agent behavior
-- Always run audit first, even in apply mode.
-- Ask for confirmation before create/update operations.
-- Match by `store_identifier` first.
-- Use full pagination (`--paginate` for ASC, `starting_after` for RevenueCat tools).
-- Continue processing after per-item failures and report all failures together.
-- Never auto-delete ASC or RevenueCat resources in this skill.
 
 ## Common pitfalls
 - Wrong RevenueCat `project_id` or app ID.

@@ -1,5 +1,19 @@
 # Performance and Best Practices
 
+## Contents
+
+- [When to use this reference](#when-to-use-this-reference)
+- [Core principles](#core-principles)
+- [1) Keep tests synchronous where possible](#1-keep-tests-synchronous-where-possible)
+- [2) Avoid unnecessary main-actor isolation](#2-avoid-unnecessary-main-actor-isolation)
+- [3) Remove shared mutable state](#3-remove-shared-mutable-state)
+- [4) Prefer in-memory dependencies for the fast path](#4-prefer-in-memory-dependencies-for-the-fast-path)
+- [5) Use parameterized tests to reduce overhead and improve diagnostics](#5-use-parameterized-tests-to-reduce-overhead-and-improve-diagnostics)
+- [6) Keep setup cheap and scoped](#6-keep-setup-cheap-and-scoped)
+- [7) Use `.serialized` narrowly](#7-use-serialized-narrowly)
+- [8) Flakiness reduction checklist](#8-flakiness-reduction-checklist)
+- [Quick do / don't](#quick-do-dont)
+
 ## When to use this reference
 
 Use this file when test runs are slow, flaky, or not scaling in CI, and when you need practical patterns for fast, deterministic Swift Testing suites.

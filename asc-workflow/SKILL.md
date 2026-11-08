@@ -33,6 +33,14 @@ This feature is best for deterministic automation that lives in your repo, is re
 5. Execute with runtime params:
    - `asc workflow run beta BUILD_ID:123456789 GROUP_ID:abcdef`
 
+## Practical authoring rules
+
+- Keep workflow files in version control.
+- Use IDs in step commands where possible for deterministic automation.
+- Use `--confirm` for destructive `asc` operations inside steps.
+- Validate first, then dry-run, then real run.
+- Keep hooks lightweight and side-effect aware.
+
 ## File location and format
 
 - Default path: `.asc/workflow.json`
@@ -146,13 +154,7 @@ Sub-workflow call step (`"workflow": "...", "with": {...}`):
 - Fallback is `sh -c` when bash is unavailable.
 - Pipelines therefore fail correctly in most CI shells when bash exists.
 
-## Practical authoring rules
-
-- Keep workflow files in version control.
-- Use IDs in step commands where possible for deterministic automation.
-- Use `--confirm` for destructive `asc` operations inside steps.
-- Validate first, then dry-run, then real run.
-- Keep hooks lightweight and side-effect aware.
+## Example `.asc/workflow.json`
 
 ```json
 {

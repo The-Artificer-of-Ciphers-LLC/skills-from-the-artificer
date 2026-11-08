@@ -8,7 +8,7 @@ description: Use when writing, reviewing, or refactoring SwiftUI code for iOS or
 
 ## Operating Rules
 
-- Consult `references/latest-apis.md` at the start of every task to avoid deprecated APIs
+- Check `references/latest-apis.md` for any API you are about to write or approve that may have a newer replacement; its table of contents is split by deployment target, so read only the section for the project's minimum OS
 - Prefer native SwiftUI APIs over UIKit/AppKit bridging unless bridging is necessary
 - Focus on correctness and performance; do not enforce specific architectures (MVVM, VIPER, etc.)
 - Encourage separating business logic from views for testability without mandating how
@@ -139,7 +139,7 @@ These are hard rules -- violations are always bugs:
 
 ## References
 
-- `references/latest-apis.md` -- **Read first for every task.** Deprecated-to-modern API transitions (iOS 15+ through iOS 26+)
+- `references/latest-apis.md` -- **Check for every API you touch.** Deprecated-to-modern API transitions (iOS 15+ through iOS 26+), sectioned by deployment target
 - `references/state-management.md` -- Property wrappers, data flow, `@Observable` migration
 - `references/view-structure.md` -- View extraction, container patterns, `@ViewBuilder`
 - `references/performance-patterns.md` -- Hot-path optimization, update control, `_logChanges()`

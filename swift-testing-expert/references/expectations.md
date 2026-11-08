@@ -1,5 +1,16 @@
 # Expectations
 
+## Contents
+
+- [When to use this reference](#when-to-use-this-reference)
+- [`#expect` as the default](#expect-as-the-default)
+- [`#require` for prerequisites](#require-for-prerequisites)
+- [Throwing behavior checks](#throwing-behavior-checks)
+- [Known issue handling](#known-issue-handling)
+- [Readability upgrade](#readability-upgrade)
+- [XCTest mapping quick examples](#xctest-mapping-quick-examples)
+- [Do / Don't](#do-dont)
+
 ## When to use this reference
 
 Use this file when writing assertions, migrating from `XCTAssert*`, testing thrown errors, or documenting known failures.

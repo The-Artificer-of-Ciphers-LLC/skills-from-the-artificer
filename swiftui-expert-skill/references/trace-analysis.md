@@ -11,6 +11,15 @@ cause graph) and exposes three discovery modes (`--list-logs`,
 `--list-signposts`, `--fanin-for`) plus a `--window` flag so the agent
 can focus analysis on a precise slice of the trace.
 
+## Contents
+
+- [When to invoke](#when-to-invoke)
+- [The three CLI modes](#the-three-cli-modes)
+- [Composition pattern — scoping to a slice](#composition-pattern-scoping-to-a-slice)
+- [JSON shape](#json-shape)
+- [Interpretation guide](#interpretation-guide)
+- [Recommended output format for the user](#recommended-output-format-for-the-user)
+
 ## When to invoke
 
 Any of these signals:

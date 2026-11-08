@@ -1,5 +1,15 @@
 # Async Testing and Waiting
 
+## Contents
+
+- [When to use this reference](#when-to-use-this-reference)
+- [Preferred approach](#preferred-approach)
+- [Callback bridging](#callback-bridging)
+- [Confirmations for asynchronous events](#confirmations-for-asynchronous-events)
+- [Event handlers and multi-fire callbacks](#event-handlers-and-multi-fire-callbacks)
+- [Avoid legacy waiting anti-patterns](#avoid-legacy-waiting-anti-patterns)
+- [Actor isolation in tests](#actor-isolation-in-tests)
+
 ## When to use this reference
 
 Use this file when tests involve async/await functions, completion handlers, streams/events, or timing-related flakiness.

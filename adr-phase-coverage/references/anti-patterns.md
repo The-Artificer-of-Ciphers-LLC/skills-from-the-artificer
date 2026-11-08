@@ -3,6 +3,14 @@
 The decomposition failures this skill exists to catch, each with the smell, the check that catches
 it, and the fix.
 
+## Contents
+
+- [1. The orphaned decision](#1-the-orphaned-decision)
+- [2. The dangling deferral ("see Phase N+1") — the ADR-1244 bug](#2-the-dangling-deferral-see-phase-n1-the-adr-1244-bug)
+- [3. The unwired keystone (lib-without-entry-point)](#3-the-unwired-keystone-lib-without-entry-point)
+- [4. Multi-owner ambiguity](#4-multi-owner-ambiguity)
+- [5. Docs describe what no phase builds](#5-docs-describe-what-no-phase-builds)
+
 ## 1. The orphaned decision
 
 **Smell.** A decision in the ADR has no phase that claims it. Often invisible because the ADR's own

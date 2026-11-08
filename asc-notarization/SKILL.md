@@ -13,6 +13,16 @@ Use this skill when you need to notarize a macOS app for distribution outside th
 - A Developer ID Application certificate in the local keychain.
 - The app's Xcode project builds for macOS.
 
+## Progress checklist
+
+- [ ] Preflight: Developer ID Application identity found; certificate chain verified
+- [ ] Step 1: archive built
+- [ ] Step 2: exported with `method: developer-id`; Authority chain and Timestamp confirmed
+- [ ] Step 3: ZIP (or DMG / PKG) created
+- [ ] Step 4: submitted with `--wait`
+- [ ] Step 5: status Accepted; on any failure read the developer log, fix, resubmit
+- [ ] Step 6: ticket stapled (the app, then the DMG / PKG if one is shipped)
+
 ## Preflight: Verify Signing Identity
 
 Before archiving, confirm a valid Developer ID Application identity exists:
