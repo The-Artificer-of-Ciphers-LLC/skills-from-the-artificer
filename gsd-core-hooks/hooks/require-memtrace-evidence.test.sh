@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 export GSD_CORE_SCOPE_ANY=1
-# Behavioral suite for require-memtrace-evidence.sh (quota-marker gate).
+# Behavioral suite for require-memtrace-evidence.sh (graph evidence gate).
 #   bash gsd-core-hooks/hooks/require-memtrace-evidence.test.sh
 set -uo pipefail
 cd "$(dirname "$0")" || exit 1
@@ -9,31 +9,26 @@ D=$(mktemp -d); trap 'rm -rf "$D"' EXIT
 N=0; F=0
 pass() { N=$((N+1)); echo "PASS  $1"; }
 fail() { N=$((N+1)); F=$((F+1)); echo "FAIL  $1 -> $2"; }
-CG=$'### CodeGraph Evidence\n- codegraph impact foo: 3 callers\n- codegraph callers foo: a, b\n'
-CGPART=$'### CodeGraph Evidence\n- codegraph impact foo: 3 callers\n'
-MT=$'### Memtrace Evidence\nget_impact get_symbol_context recall_decision find_code_review_issues\n'
-VERB="gh pr review 7"
-run() { # body statefile
+run() { # body [flag]
   printf '%s' "$1" > "$D/body.md"
-  OUT=$(MEMTRACE_QUOTA_STATE="$2" bash "$HOOK" <<<"$(jq -n --arg c "$VERB --approve --body-file $D/body.md" '{tool_input:{command:$c}}')")
+  OUT=$(bash "$HOOK" <<<"$(jq -n --arg c "gh pr review 7 ${2:---approve} --body-file $D/body.md" '{tool_input:{command:$c}}')")
 }
 denied() { printf '%s' "$OUT" | grep -q '"permissionDecision": "deny"'; }
-now=$(python3 -c 'import time;print(int(time.time()*1000))')
-echo "{\"blocked\":true,\"until\":$((now+3600000))}" > "$D/live.json"
-echo "{\"blocked\":true,\"until\":$((now-1000))}" > "$D/expired.json"
-echo "{\"blocked\":false,\"until\":$((now+3600000))}" > "$D/unblocked.json"
-echo "not json" > "$D/bad.json"
 
-run "$CG" "$D/live.json"
-! denied && printf '%s' "$OUT" | grep -qE 'returns at [0-9]{4}-[0-9]{2}-[0-9]{2}T' && pass "live cooldown: CodeGraph evidence accepted with ISO return time" || fail live "$OUT"
-run "$CGPART" "$D/live.json"
-denied && printf '%s' "$OUT" | grep -q 'callers|callees|node' && pass "live cooldown: missing callers/callees/node denied" || fail partial "$OUT"
-for s in expired unblocked bad missing; do
-  run "$CG" "$D/$s.json"
-  denied && printf '%s' "$OUT" | grep -q 'Memtrace is not in a quota cooldown; run the Memtrace tools' && pass "$s marker: CodeGraph evidence denied" || fail "$s" "$OUT"
-done
-run $'Memtrace unavailable: quota\n'"$CG" "$D/missing.json"
-denied && pass "self-attested line no longer accepted" || fail selfattest "$OUT"
-run "$MT" "$D/missing.json"; ! denied && pass "full Memtrace evidence accepted without marker" || fail mt "$OUT"
-run $'### Memtrace Evidence\nget_impact only\n' "$D/live.json"; denied && pass "partial Memtrace evidence denied" || fail mtpart "$OUT"
+run $'AI-assisted review by @trek-e.\n### Graph Evidence\n- codegraph impact foo: 3 callers\n'
+! denied && pass "graph evidence with codegraph impact accepted" || fail cg "$OUT"
+run $'### Graph Evidence\n- get_impact foo: medium risk\n' --request-changes
+! denied && pass "graph evidence with get_impact accepted on request-changes" || fail mt "$OUT"
+run $'### Memtrace Evidence\nget_impact get_symbol_context recall_decision find_code_review_issues\n'
+! denied && pass "old Memtrace Evidence heading still accepted" || fail old "$OUT"
+run $'### CodeGraph Evidence\n- codegraph impact foo: 3 callers\n'
+! denied && pass "old CodeGraph Evidence heading accepted with no quota marker" || fail oldcg "$OUT"
+run $'### Graph Evidence\n- codegraph callers foo: a, b\n'
+denied && printf '%s' "$OUT" | grep -q 'no blast-radius call' && pass "section without a blast-radius call denied" || fail noimpact "$OUT"
+run $'Summary only, codegraph impact mentioned in prose\n'
+denied && printf '%s' "$OUT" | grep -q "missing the '### Graph Evidence' section" && pass "missing section denied" || fail nosection "$OUT"
+OUT=$(bash "$HOOK" <<<"$(jq -n --arg c 'gh pr review 7 --approve --body-file "$BODY"' '{tool_input:{command:$c}}')")
+denied && printf '%s' "$OUT" | grep -q 'No body found' && pass "unexpanded body path denied" || fail novar "$OUT"
+OUT=$(bash "$HOOK" <<<"$(jq -n --arg c 'gh pr review 7 --comment --body "ok"' '{tool_input:{command:$c}}')")
+[ -z "$OUT" ] && pass "--comment is exempt" || fail comment "$OUT"
 echo "$N checks, $F failed"; [ "$F" -eq 0 ]

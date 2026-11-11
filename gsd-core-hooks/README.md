@@ -28,7 +28,7 @@ gsd-core-hooks/
     ├── gsd-foreground-poll-guard.sh   PreToolUse(Bash)      — denies a foreground `while`/`until` poll loop with a long sleep (dies at the harness ceiling, indistinguishable from the watched job failing)
     ├── gsd-pgrep-waiter-guard.sh      PreToolUse(Bash\|Monitor) — denies a `pgrep -f "<cmd>"` wait-loop whose own argv matches its search pattern (never terminates)
     ├── block-local-node-test.sh       PreToolUse(Bash)      — hard-denies local `node --test` / `npm test` (orphans the workstation; route through the remote runner)
-    ├── require-memtrace-evidence.sh   PreToolUse(Bash)      — blocks `gh pr review --approve/--request-changes` unless the review body documents which Memtrace tools were actually called
+    ├── require-memtrace-evidence.sh   PreToolUse(Bash)      — blocks `gh pr review --approve/--request-changes` unless the review body has a `### Graph Evidence` section naming a blast-radius call (`codegraph impact` or `get_impact`)
     ├── gsd-phase-gate.cjs             PreToolUse(Edit\|Write\|Bash) — the project-specific artifact gate this repo's `artifact-gates/` engine was generalized from (see the note below)
     ├── emitted-cjs-read-guard.cjs     PreToolUse(Read\|Edit\|Write\|NotebookEdit) — denies reading/editing tsc-emitted `.cjs` output instead of its authored `.cts` source
     ├── worktree-fresh-base-guard.sh   PreToolUse(Bash\|EnterWorktree) — denies creating/entering a worktree branched off a stale base
@@ -107,13 +107,12 @@ Every hook here assumes pieces of gsd-core's specific toolchain. At minimum:
   `{"type":"verdict","outcome":"passed"}` line, and a per-sha pass-marker file. Substitute your own
   runner and its own "this pass belongs to this sha" binding — that binding is the part that
   matters, not the specific tool.
-- **Memtrace.** `require-memtrace-evidence.sh` assumes the Memtrace MCP server is installed and
-  indexing your repo. Without it, either point it at your own code-discovery tool or drop it — a
-  guard that demands a tool you don't have just denies everything.
-  The CodeGraph-evidence fallback is no longer self-attested: the gate reads the quota marker
-  (`${MEMTRACE_QUOTA_STATE:-~/.claude/state/memtrace-quota.json}`, `{blocked, until}` with `until` in ms epoch)
-  and accepts `### CodeGraph Evidence` only while `blocked` is true and `until` is in the future; a missing or
-  unparseable marker fails closed to the Memtrace-evidence requirement.
+- **Graph evidence.** `require-memtrace-evidence.sh` (name kept so existing installs keep working) asks only that an
+  approve or request-changes body has a `### Graph Evidence` section (the older `### Memtrace Evidence` and
+  `### CodeGraph Evidence` headings still pass) naming a blast-radius call: `codegraph impact` or Memtrace's
+  `get_impact`. It no longer requires four Memtrace tool names or reads the Memtrace quota marker: requiring Memtrace
+  by name turned quota exhaustion into a denied post. Without CodeGraph or Memtrace, point it at your own graph tool
+  or drop it.
   The Memtrace-first *code-discovery* guard that used to live here was **removed**: it is not
   specific to this project, and a second, more complete implementation of the same rule already
   ships as global policy in [`../claude-guards/`](../claude-guards/), as

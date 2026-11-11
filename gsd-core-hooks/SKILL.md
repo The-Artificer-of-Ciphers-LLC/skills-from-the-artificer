@@ -1,6 +1,6 @@
 ---
 name: gsd-core-hooks
-description: A full PreToolUse/PostToolUse hook suite that machine-enforces a project's workflow rules instead of leaving them as prose — a passing test-runner verdict bound to the exact commit sha before push, no local `node --test`, Memtrace evidence required on a PR approval, no-defer artifact gating for long directives, and a family of guards against harness poll/timeout false-negatives (backgrounded dispatch, foreground poll-loop kills, self-matching pgrep waits, unpinned bench contention, double-dispatch). Use when an agent keeps skipping "ABSOLUTE"/"MANDATORY" rules in CLAUDE.md despite them being written down, when a CI/test gate needs to be unbypassable rather than self-attested, when local test runs are orphaning processes or leaving container relics, or when a long-running remote job's poll loop keeps dying against the harness's own timeout ceiling. Companion to `commands/` — those directives *describe* these rules in prose; this ships the mechanism that actually holds the line.
+description: A full PreToolUse/PostToolUse hook suite that machine-enforces a project's workflow rules instead of leaving them as prose — a passing test-runner verdict bound to the exact commit sha before push, no local `node --test`, blast-radius evidence (CodeGraph or Memtrace) required on a PR approval, no-defer artifact gating for long directives, and a family of guards against harness poll/timeout false-negatives (backgrounded dispatch, foreground poll-loop kills, self-matching pgrep waits, unpinned bench contention, double-dispatch). Use when an agent keeps skipping "ABSOLUTE"/"MANDATORY" rules in CLAUDE.md despite them being written down, when a CI/test gate needs to be unbypassable rather than self-attested, when local test runs are orphaning processes or leaving container relics, or when a long-running remote job's poll loop keeps dying against the harness's own timeout ceiling. Companion to `commands/` — those directives *describe* these rules in prose; this ships the mechanism that actually holds the line.
 ---
 
 # gsd-core-hooks
@@ -41,7 +41,7 @@ regardless of whether the agent remembers reading them.
 
 **None of this is generic.** Every script assumes gsd-core's specific toolchain: a remote dockerized
 test runner called `gsd-test` that emits a `{"type":"verdict","outcome":"passed"}` line, a per-sha
-pass-marker file under `<git-common-dir>/gsd-passes/`, Memtrace as the MCP server whose use
+pass-marker file under `<git-common-dir>/gsd-passes/`, CodeGraph (or Memtrace) as the graph tool whose blast-radius call
 `require-memtrace-evidence.sh` audits, and
 (in `emitted-cjs-read-guard.cjs`) a `.cts` → `.cjs` build pipeline specific to that repo. Installing
 these unedited against a different project will produce confident denials referencing tools you do
