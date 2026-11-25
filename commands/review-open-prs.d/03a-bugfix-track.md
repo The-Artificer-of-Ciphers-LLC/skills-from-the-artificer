@@ -2,6 +2,7 @@
 
 ### 3A. Bug-Fix Track
 **[BLOCKING]**
+**Every numbered step below is mandatory, in order, on every bug-fix PR, at every diff size. Steps 5 through 9 are real `Skill` / subagent calls, each made on every such PR and each cited in §8's Review-passes ledger; `/code-review` and the Deterministic Review Pass (§3D) are both required, and neither substitutes for the other or for any other step. Hard rule 9 (no discretion over command steps) governs: no step may be skipped, shortened or replaced by the agent's own reading, and a step that did not run blocks the verdict.**
 1. `/diagnose` — reproduce defect.
 2. `/root-cause-analysis` — identify true root cause. Compare against the PR. Compute blast radius with `codegraph impact` (§1.11); on a full-tier PR, the §1.11b `get_impact` result is the second opinion.
    - **Prove the fix site is actually on the failing path.** Walk `codegraph callers` up from the symbol the PR modifies until you reach the reported entry point. **No path is a Blocker**: it means the diff cannot reach the reported symptom, which is the signature of a fix aimed at the wrong layer. Where the symptom names a flow rather than a function, trace it with `codegraph callees` from the entry point and show which step the diff sits on.

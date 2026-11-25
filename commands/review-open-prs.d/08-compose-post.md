@@ -4,6 +4,17 @@
 **[BLOCKING]**
 **ZERO-TOLERANCE APPROVAL POLICY:** Minor issues are NOT approvable. Every issue (including nits) MUST be fully resolved. Merge conflicts immediately block approval.
 
+**REVIEW-PASSES LEDGER (BLOCKING — no row may be absent; hard rule 9 governs).** Before composing a verdict on a full review (the §1.5 conflict-only review has its own listed steps), build this ledger from tool results of THIS run for THIS head sha and put it in the review body as `### Review passes`, one line per row, each citing the evidence the row names. A row with no evidence is a missing step: do not post; run it now, or, if the call itself fails after being attempted, end the run with `OUTCOME: blocked` and the failed call verbatim.
+   1. Every numbered step of the track (§3A for a bug fix, §3B for a feature or enhancement), each with its evidence (the `Skill` call made, the file written, the tool result).
+   2. `/qa-test-architect` — the `Skill` call and its output.
+   3. `/skills-from-the-artificer` — the `Skill` call and the returned `## Laws that apply` block.
+   4. `/code-review` — the subagent run and the `FILE:` path it returned.
+   5. `/security-review` — the subagent run and the `FILE:` path it returned.
+   6. Isolated adversarial pass — the fresh-subagent run and the `FILE:` path it returned.
+   7. Deterministic Review Pass (§3D) — the commands run and their results.
+   8. Every other step the track names (`/diagnose`, `/root-cause-analysis` or the manual comparison it requires, `/rubber-duck`, `/codebase-design`, `/writing-documentation-with-diataxis`, the ADR and documentation gates).
+   The ledger never contains a "not run", "skipped", "not needed" or "covered by" row, and the review body never carries an "Other passes" paragraph that explains an absent pass by diff size or by the agent's own reading. A review posted without the complete ledger is a violation; correct it per hard rule 9.
+
 Structure: the line `AI-assisted review by @trek-e.` → Summary → Classification & gate compliance → Functional checklist / Root-cause verdict → Blast radius (from `codegraph impact`) + risk tier and why (§1.11b) → Co-change completeness (from 4C) → **`### Graph Evidence`** → Findings by severity (Blocker/Major/Minor/Nit) → Verdict.
 
 Deterministic findings (§3D) and judgment findings (`/code-review`, `/security-review`, the isolated adversarial pass) both land in the severity list, but **attribute each one to its source**. A §3D.2 removed-symbol-still-referenced from `codegraph callers` is a fact about the graph and is not negotiable in review discussion; a style or design objection is a judgment the contributor may reasonably push back on. Merging the two into one undifferentiated list is how a hard finding gets argued away.
